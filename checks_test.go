@@ -403,3 +403,41 @@ func TestTDDExemptsOnlyWhatSqlcOwnsAndCountsItsSQLAsCode(t *testing.T) {
 		}
 	}
 }
+
+// The linters read configuration the agent could edit; a change to it, against the commit the task started
+// from, is refused before any tool runs (final review I-6).
+func TestStaticRefusesAChangeToTheLadderConfiguration(t *testing.T) {
+	start := map[string]string{"go.mod": goMod, "a.go": "package t\n", ".golangci.yml": "version: \"2\"\n", ".devcontainer/devcontainer.json": "{}\n"}
+	cases := []struct {
+		name  string
+		files map[string]string
+		pass  bool
+	}{
+		{"linters turned off", map[string]string{".golangci.yml": "version: \"2\"\nlinters:\n  default: none\n"}, false},
+		{"the dev container changed", map[string]string{".devcontainer/devcontainer.json": "{\"x\": 1}\n"}, false},
+		{"code only", map[string]string{"b.go": "package t\n"}, true},
+	}
+	for _, c := range cases {
+		dir := repo(t, start)
+		work(t, dir, c.files)
+		bin := stubs(t, "golangci-lint")
+		code, out := script(t, dir, bin, "go-static.sh")
+		if (code == 0) != c.pass || (!c.pass && (!strings.Contains(out, "protected") || calls(bin) != "")) {
+			t.Errorf("%s: exit %d, calls %q\n%s", c.name, code, calls(bin), out)
+		}
+	}
+	// An uncommitted edit and a deletion count too.
+	dir := repo(t, start)
+	git(t, dir, "switch", "-q", "-c", "work")
+	put(t, dir, map[string]string{".golangci.yml": "linters:\n  default: none\n"})
+	if code, out := script(t, dir, stubs(t, "golangci-lint"), "go-static.sh"); code == 0 || !strings.Contains(out, ".golangci.yml") {
+		t.Errorf("an uncommitted edit: exit %d\n%s", code, out)
+	}
+	dir = repo(t, start)
+	git(t, dir, "switch", "-q", "-c", "work")
+	git(t, dir, "rm", "-q", ".golangci.yml")
+	git(t, dir, "commit", "-q", "-m", "drop")
+	if code, out := script(t, dir, stubs(t, "golangci-lint"), "go-static.sh"); code == 0 || !strings.Contains(out, ".golangci.yml") {
+		t.Errorf("a deleted configuration: exit %d\n%s", code, out)
+	}
+}

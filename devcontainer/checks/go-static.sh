@@ -4,6 +4,19 @@
 set -euo pipefail
 # The tools are found in the image's root-owned folders only, never in one the agent can write (/go/bin).
 export PATH="${YGG_CHECKS_PATH:-/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin}"
+echo "== protected paths"
+# The linters read configuration the agent could edit. A change or deletion of it, against the commit the
+# task started from (main), turns a rung green by itself, so it is refused. Added files are not: a new leaf
+# gets its configuration from the template after main was cut.
+if base="$(git merge-base HEAD main 2>/dev/null)"; then
+  changed="$(git diff --no-renames --name-only --diff-filter=MD "$base" -- '.golangci.*' '.devcontainer/')"
+  if [ -n "$changed" ]; then
+    echo "static: these files configure the checks, they are protected, and this task changed them:"
+    printf '  %s\n' "$changed"
+    echo "Put them back as they were; if the check is wrong, say so in your report."
+    exit 1
+  fi
+fi
 echo "== gofmt"
 unformatted="$(gofmt -l . || true)"
 if [ -n "$unformatted" ]; then
