@@ -22,3 +22,14 @@ paths:
                   status:
                     type: string
                     enum: [ok]
+        "503":
+          description: The server is up but its database does not answer.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [database unavailable]

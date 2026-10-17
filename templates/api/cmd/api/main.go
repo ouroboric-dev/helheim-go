@@ -1,4 +1,5 @@
-// Command api serves the HTTP API on the port named by PORT (8080 when unset).
+// Command api serves the HTTP API on the port named by PORT (8080 when unset), with the database at
+// DATABASE_URL when that is set.
 package main
 
 import (
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"api/internal/httpapi"
+	"api/internal/store"
 )
 
 func main() {
@@ -20,9 +22,18 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	srv := &http.Server{Addr: ":" + strconv.Itoa(port), Handler: httpapi.New(), ReadHeaderTimeout: 5 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	var deps httpapi.Deps
+	if url := os.Getenv("DATABASE_URL"); url != "" {
+		pool, err := store.Open(ctx, url)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer pool.Close()
+		deps.DB = pool
+	}
+	srv := &http.Server{Addr: ":" + strconv.Itoa(port), Handler: httpapi.New(deps), ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)

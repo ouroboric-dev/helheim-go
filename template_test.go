@@ -34,12 +34,30 @@ func toolIn(t *testing.T, dir, tool string, args ...string) string {
 
 func goIn(t *testing.T, dir string, args ...string) string { return toolIn(t, dir, "go", args...) }
 
+// needModules downloads the template's modules, and skips the test when the module proxy can't be
+// reached, unless YGG_REQUIRE_TEMPLATES is set (a CI that must not skip). It is the one place these
+// tests need the network, and only on a machine that has not built the template before.
+func needModules(t *testing.T, dir string) {
+	t.Helper()
+	cmd := exec.Command("go", "mod", "download")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GOWORK=off")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		if os.Getenv("YGG_REQUIRE_TEMPLATES") != "" {
+			t.Fatalf("go mod download: %v\n%s", err, out)
+		}
+		t.Skipf("the template's modules can't be downloaded (set YGG_REQUIRE_TEMPLATES to fail instead): %v", err)
+	}
+}
+
 func TestTheAPITemplateBuildsAndPassesItsOwnChecks(t *testing.T) {
 	dir := copyTemplate(t, "api")
+	needModules(t, dir)
 	if out := toolIn(t, dir, "gofmt", "-l", "."); out != "" {
 		t.Errorf("not gofmt-clean:\n%s", out)
 	}
 	goIn(t, dir, "vet", "./...")
+	goIn(t, dir, "vet", "-tags", "integration", "./...")
 	goIn(t, dir, "test", "-race", "-count=1", "./...")
 }
 

@@ -12,7 +12,8 @@ This file only adds rules for this leaf. Read `docs/` for the design; this file 
 - `go.mod` says `module api`. Imports are `api/internal/...`.
 - Standard library first: `net/http` with the Go 1.22 pattern mux. A new dependency needs a reason in
   the commit message that the standard library cannot give.
-- The server listens on `PORT`. It reads nothing else from the environment that is not named in `docs/`.
+- The server listens on `PORT` and uses the database at `DATABASE_URL` when that is set. It reads nothing
+  else from the environment that is not named in `docs/`.
 
 ## Rules for every change
 
@@ -21,6 +22,9 @@ This file only adds rules for this leaf. Read `docs/` for the design; this file 
 - **The contract and the code change together.** A route is added in `internal/httpapi` and described in
   `openapi.yaml` in the same commit. A change that breaks consumers (a removed route or field, a new
   required field) is a contract change: say so in the commit message.
+- **Data goes through sqlc.** A query is SQL in `db/queries`, a schema change is a new file in
+  `internal/store/migrations` (never an edit of one that exists), and `sqlc generate` writes
+  `internal/store`. The factory refuses a change whose generated code is out of date (`sqlc diff`).
 - **The server builds every storage key** from the logged-in user and the resource. It ignores keys a
   client sends. Authorisation is checked in the handler, not only in middleware.
 - Errors answer JSON `{"error": "..."}` with the right status. A handler never leaks a stack trace, a
@@ -31,4 +35,7 @@ This file only adds rules for this leaf. Read `docs/` for the design; this file 
 
 - `cmd/api`: the program. It wires things and starts the server; it holds no logic.
 - `internal/httpapi`: routes, request and response encoding, errors.
+- `internal/store`: the database: migrations, and the code sqlc generates. Do not edit `*.sql.go`.
+- `db/queries`: the SQL that sqlc turns into Go.
+- Tests that need a database carry `//go:build integration` and read `YGG_DATABASE_URL`.
 - `openapi.yaml`: the contract.

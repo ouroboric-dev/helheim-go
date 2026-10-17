@@ -2,15 +2,26 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 )
 
+// Pinger is what the server needs to know whether the database is there.
+type Pinger interface {
+	Ping(ctx context.Context) error
+}
+
+// Deps are what the routes use. A field that is nil is a part the server runs without.
+type Deps struct {
+	DB Pinger
+}
+
 // New returns the handler of every route. A route is added here and described in openapi.yaml, in the
 // same change.
-func New() http.Handler {
+func New(d Deps) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", only(http.MethodGet, healthz))
+	mux.HandleFunc("/healthz", only(http.MethodGet, healthz(d)))
 	mux.HandleFunc("/", notFound)
 	return mux
 }
@@ -28,8 +39,15 @@ func only(method string, h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func healthz(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+func healthz(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if d.DB != nil && d.DB.Ping(r.Context()) != nil {
+			// What is wrong stays in the server's log; a caller learns only that the database is not there.
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "database unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}
 }
 
 func notFound(w http.ResponseWriter, _ *http.Request) {
