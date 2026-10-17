@@ -2,9 +2,11 @@ package helheim
 
 import (
 	"bytes"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -233,5 +235,78 @@ func TestTDDWantsTheNewTestsToFailOnTheCommitTheTaskStartedFrom(t *testing.T) {
 	script(t, dir, "", "go-tdd.sh")
 	if st := git(t, dir, "status", "--porcelain"); st != "" {
 		t.Errorf("the check left the leaf changed:\n%s", st)
+	}
+}
+
+func TestContractLintsTheContractChecksGeneratedCodeAndListsBreakingChanges(t *testing.T) {
+	start := map[string]string{"openapi.yaml": "openapi: 3.1.0\n", "sqlc.yaml": "version: \"2\"\n"}
+	dir := repo(t, start)
+	work(t, dir, map[string]string{"openapi.yaml": "openapi: 3.1.0\ninfo: {}\n"})
+	bin := stubs(t, "vacuum", "sqlc", "oasdiff")
+	code, out := script(t, dir, bin, "go-contract.sh", `STUB_OASDIFF_OUT=[{"id":"response-success-status-removed","text":"DELETE /x removed"}]`)
+	got := calls(bin)
+	for _, want := range []string{"vacuum lint --no-style --details --fail-severity error openapi.yaml", "sqlc diff", "oasdiff breaking "} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the tools were called %q, want %q", got, want)
+		}
+	}
+	if code != 0 || !strings.Contains(out, "BREAKING") || !strings.Contains(out, "DELETE /x removed") || !strings.Contains(got, "oasdiff breaking") {
+		t.Errorf("a breaking change is listed and not refused: exit %d\n%s", code, out)
+	}
+	bin = stubs(t, "vacuum", "sqlc", "oasdiff")
+	if code, out := script(t, dir, bin, "go-contract.sh", "STUB_OASDIFF_OUT=[]"); code != 0 || !strings.Contains(out, "none") || strings.Contains(out, "BREAKING") {
+		t.Errorf("no breaking change: exit %d\n%s", code, out)
+	}
+	for name, env := range map[string]string{"a lint error": "STUB_VACUUM_EXIT=1", "generated code that is out of date": "STUB_SQLC_EXIT=1"} {
+		if code, out := script(t, dir, stubs(t, "vacuum", "sqlc", "oasdiff"), "go-contract.sh", env); code == 0 {
+			t.Errorf("%s passed:\n%s", name, out)
+		}
+	}
+	if code, out := script(t, repo(t, map[string]string{"a.txt": "x"}), stubs(t, "vacuum", "sqlc", "oasdiff"), "go-contract.sh"); code == 0 || !strings.Contains(out, "no openapi.yaml") {
+		t.Errorf("a leaf with no contract: exit %d\n%s", code, out)
+	}
+	// A contract that did not exist when the task started is new, with nothing to break.
+	fresh := repo(t, map[string]string{"sqlc.yaml": "x"})
+	work(t, fresh, map[string]string{"openapi.yaml": "openapi: 3.1.0\n"})
+	bin = stubs(t, "vacuum", "sqlc", "oasdiff")
+	if code, out := script(t, fresh, bin, "go-contract.sh"); code != 0 || !strings.Contains(out, "is new in this change") || strings.Contains(calls(bin), "oasdiff") {
+		t.Errorf("a new contract: exit %d, calls %q\n%s", code, calls(bin), out)
+	}
+}
+
+func TestSecurityStopsOnAVulnerabilityFromEitherSource(t *testing.T) {
+	dir := leaf(t, map[string]string{"go.mod": goMod})
+	bin := stubs(t, "govulncheck", "osv-scanner")
+	if code, out := script(t, dir, bin, "go-security.sh"); code != 0 {
+		t.Fatalf("a clean leaf: exit %d\n%s", code, out)
+	}
+	for _, want := range []string{"govulncheck ./...", "govulncheck -tags integration ./...", "osv-scanner scan source -L go.mod"} {
+		if !strings.Contains(calls(bin), want) {
+			t.Errorf("calls %q lack %q", calls(bin), want)
+		}
+	}
+	for _, env := range []string{"STUB_GOVULNCHECK_EXIT=3", "STUB_OSV_SCANNER_EXIT=1"} {
+		if code, _ := script(t, dir, stubs(t, "govulncheck", "osv-scanner"), "go-security.sh", env); code == 0 {
+			t.Errorf("%s passed", env)
+		}
+	}
+}
+
+func TestIntegrationWaitsForPostgresAndRunsTheTaggedTestsWithItsAddress(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	port := ln.Addr().(*net.TCPAddr).Port
+	files := map[string]string{"go.mod": goMod, "a.go": "package t\n", "a_it_test.go": "//go:build integration\n\npackage t\n\nimport (\n\t\"os\"\n\t\"testing\"\n)\n\n" +
+		"func TestURL(t *testing.T) {\n\tif os.Getenv(\"YGG_DATABASE_URL\") != \"postgres://postgres@127.0.0.1:" + strconv.Itoa(port) + "/app?sslmode=disable\" {\n\t\tt.Fatal(os.Getenv(\"YGG_DATABASE_URL\"))\n\t}\n}\n"}
+	env := []string{"YGG_DB_HOST=127.0.0.1", "YGG_DB_PORT=" + strconv.Itoa(port)}
+	if code, out := script(t, leaf(t, files), "", "go-integration.sh", env...); code != 0 {
+		t.Errorf("with a database: exit %d\n%s", code, out)
+	}
+	ln.Close()
+	if code, out := script(t, leaf(t, files), "", "go-integration.sh", append(env, "YGG_DB_WAIT=2")...); code == 0 || !strings.Contains(out, "did not answer") {
+		t.Errorf("with no database: exit %d\n%s", code, out)
 	}
 }
