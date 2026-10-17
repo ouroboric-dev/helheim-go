@@ -416,8 +416,14 @@ func TestStaticRefusesAChangeToTheLadderConfiguration(t *testing.T) {
 	}{
 		{"linters turned off", map[string]string{".golangci.yml": "version: \"2\"\nlinters:\n  default: none\n"}, false},
 		{"the dev container changed", map[string]string{".devcontainer/devcontainer.json": "{\"x\": 1}\n"}, false},
+		{"another configuration file added beside it", map[string]string{".golangci.json": "{\"version\": \"2\", \"linters\": {\"default\": \"none\"}}\n"}, false},
+		{"a file added to the dev container", map[string]string{".devcontainer/extra.json": "{}\n"}, false},
+		{"sqlc.yaml pointed elsewhere", map[string]string{"sqlc.yaml": "version: \"2\"\nout: elsewhere\n"}, false},
+		{"sqlc.json added", map[string]string{"sqlc.json": "{}\n"}, false},
 		{"code only", map[string]string{"b.go": "package t\n"}, true},
 	}
+	start[".golangci.yml"] = "version: \"2\"\n"
+	start["sqlc.yaml"] = "version: \"2\"\n"
 	for _, c := range cases {
 		dir := repo(t, start)
 		work(t, dir, c.files)
@@ -426,6 +432,13 @@ func TestStaticRefusesAChangeToTheLadderConfiguration(t *testing.T) {
 		if (code == 0) != c.pass || (!c.pass && (!strings.Contains(out, "protected") || calls(bin) != "")) {
 			t.Errorf("%s: exit %d, calls %q\n%s", c.name, code, calls(bin), out)
 		}
+	}
+	// An uncommitted file that is not added to git yet is read by the linter all the same.
+	dir0 := repo(t, start)
+	git(t, dir0, "switch", "-q", "-c", "work")
+	put(t, dir0, map[string]string{".golangci.toml": "[linters]\ndefault = \"none\"\n"})
+	if code, out := script(t, dir0, stubs(t, "golangci-lint"), "go-static.sh"); code == 0 || !strings.Contains(out, ".golangci.toml") {
+		t.Errorf("an untracked configuration file: exit %d\n%s", code, out)
 	}
 	// An uncommitted edit and a deletion count too.
 	dir := repo(t, start)

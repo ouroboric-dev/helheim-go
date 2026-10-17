@@ -12,11 +12,14 @@ export PATH="${YGG_CHECKS_PATH:-/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin}"
   exit 1
 }
 echo "== protected paths"
-# The linters read configuration the agent could edit. A change or deletion of it, against the commit the
-# task started from (main), turns a rung green by itself, so it is refused. Added files are not: a new leaf
-# gets its configuration from the template after main was cut.
+# The linters read configuration the agent could edit, and sqlc.yaml says what go-contract.sh and go-tdd.sh
+# check. Any change, addition or deletion of it, against the commit the task started from (main), turns a rung
+# green by itself (a .golangci.json beside .golangci.yml wins over it), so it is refused. This includes a file
+# not added to git yet.
 if base="$(git merge-base HEAD main 2>/dev/null)"; then
-  changed="$(git diff --no-renames --name-only --diff-filter=MD "$base" -- '.golangci.*' '.devcontainer/')"
+  protected=('.golangci.*' 'sqlc.*' '.devcontainer/')
+  changed="$({ git diff --no-renames --name-only --diff-filter=AMD "$base" -- "${protected[@]}"
+    git ls-files --others --exclude-standard -- "${protected[@]}"; } | sort -u)"
   if [ -n "$changed" ]; then
     echo "static: these files configure the checks, they are protected, and this task changed them:"
     printf '  %s\n' "$changed"
