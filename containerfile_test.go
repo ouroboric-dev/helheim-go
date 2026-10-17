@@ -64,6 +64,11 @@ func TestTheStackImageIsMadeOfPinnedInputsOnly(t *testing.T) {
 	if !strings.Contains(text, "rm -rf /go/pkg") {
 		t.Error("the Containerfile leaves /go/pkg to root; the agent's user could not make its module cache")
 	}
+	// /go/bin is on PATH ahead of the tools and the golang image makes it world-writable: the agent could
+	// shadow go or golangci-lint there (final review C-1).
+	if !strings.Contains(text, "chown root:root /go/bin") || !strings.Contains(text, "chmod 0755 /go/bin") {
+		t.Error("the Containerfile leaves /go/bin writable by the agent's user, and it is on PATH ahead of the tools")
+	}
 	for _, want := range []string{"golangci-lint", "sqlc", "oasdiff", "vacuum", "osv-scanner", "govulncheck", "COPY checks/ /opt/ygg/checks/", "go-w"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the Containerfile lacks %q", want)
