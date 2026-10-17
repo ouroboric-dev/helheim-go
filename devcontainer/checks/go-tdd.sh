@@ -7,6 +7,8 @@
 # reviewers look at it. Generated files are not code that needs a test. Run in the leaf's top folder, on the
 # run branch; main is where the task started from.
 set -euo pipefail
+# The tools are found in the image's root-owned folders only, never in one the agent can write (/go/bin).
+export PATH="${YGG_CHECKS_PATH:-/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin}"
 base="$(git merge-base HEAD main)" || { echo "tdd: this leaf has no main to compare with"; exit 1; }
 generated() { head -n 5 "$1" | grep -q 'Code generated'; }
 integration() { head -n 5 "$1" | grep -q '^//go:build .*integration'; }

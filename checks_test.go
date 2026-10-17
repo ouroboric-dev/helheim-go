@@ -69,9 +69,13 @@ func script(t *testing.T, dir, bin, name string, env ...string) (int, string) {
 	cmd := exec.Command("bash", abs)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=mod", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+	path := os.Getenv("PATH")
 	if bin != "" {
-		cmd.Env = append(cmd.Env, "PATH="+bin+":"+os.Getenv("PATH"))
+		path = bin + ":" + path
+		cmd.Env = append(cmd.Env, "PATH="+path)
 	}
+	// The scripts fix their own PATH (C-1); a test says what the image's fixed PATH would be here.
+	cmd.Env = append(cmd.Env, "YGG_CHECKS_PATH="+path)
 	cmd.Env = append(cmd.Env, env...)
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
@@ -309,4 +313,42 @@ func TestIntegrationWaitsForPostgresAndRunsTheTaggedTestsWithItsAddress(t *testi
 	if code, out := script(t, leaf(t, files), "", "go-integration.sh", append(env, "YGG_DB_WAIT=2")...); code == 0 || !strings.Contains(out, "did not answer") {
 		t.Errorf("with no database: exit %d\n%s", code, out)
 	}
+}
+
+// The tools the ladder calls are found on a PATH the scripts fix themselves, not on the one they are
+// started with, which may hold a folder the agent can write (final review C-1).
+func TestTheScriptsFixTheirOwnPathAndIgnoreAnAgentsFolderOnIt(t *testing.T) {
+	entries, err := os.ReadDir(filepath.Join("devcontainer", "checks"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		b, _ := os.ReadFile(filepath.Join("devcontainer", "checks", e.Name()))
+		if !strings.Contains(string(b), `PATH="${YGG_CHECKS_PATH:-/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin}"`) {
+			t.Errorf("%s does not fix its PATH to the image's root-owned folders", e.Name())
+		}
+	}
+	evil := t.TempDir()
+	if err := os.WriteFile(filepath.Join(evil, "go"), []byte("#!/bin/sh\necho FAKE-GO\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	abs, _ := filepath.Abs(filepath.Join("devcontainer", "checks", "go-unit.sh"))
+	cmd := exec.Command("bash", abs)
+	cmd.Dir = leaf(t, map[string]string{"go.mod": goMod})
+	cmd.Env = append(os.Environ(), "PATH="+evil+":"+os.Getenv("PATH"))
+	cmd.Env = slicesWithout(cmd.Env, "YGG_CHECKS_PATH=")
+	out, _ := cmd.CombinedOutput()
+	if strings.Contains(string(out), "FAKE-GO") {
+		t.Errorf("go-unit.sh ran a go found in a folder the caller put first on PATH:\n%s", out)
+	}
+}
+
+func slicesWithout(env []string, prefix string) []string {
+	var out []string
+	for _, e := range env {
+		if !strings.HasPrefix(e, prefix) {
+			out = append(out, e)
+		}
+	}
+	return out
 }

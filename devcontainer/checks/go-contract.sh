@@ -4,6 +4,8 @@
 # started from are listed. A breaking change is not refused here: the consumers must follow it, and the
 # task says so (it decides the pointer-contract approval point later). Run in the leaf's top folder.
 set -euo pipefail
+# The tools are found in the image's root-owned folders only, never in one the agent can write (/go/bin).
+export PATH="${YGG_CHECKS_PATH:-/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin}"
 [ -f openapi.yaml ] || { echo "contract: this leaf has no openapi.yaml, and it owns the contract of its API"; exit 1; }
 echo "== openapi lint"
 vacuum lint --no-style --details --fail-severity error openapi.yaml

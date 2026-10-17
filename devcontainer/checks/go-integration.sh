@@ -4,6 +4,8 @@
 # otherwise; YGG_DB_WAIT seconds, 60 by default), then runs the tests behind the integration tag. The
 # database has no password: the sandbox starts it for this run alone, on a network with no route out.
 set -euo pipefail
+# The tools are found in the image's root-owned folders only, never in one the agent can write (/go/bin).
+export PATH="${YGG_CHECKS_PATH:-/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin}"
 host="${YGG_DB_HOST:-postgres}" port="${YGG_DB_PORT:-5432}" wait_s="${YGG_DB_WAIT:-60}"
 up=0
 for ((i = 0; i < wait_s; i++)); do
