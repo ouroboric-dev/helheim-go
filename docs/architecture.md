@@ -23,6 +23,29 @@ proposal `2026-10-17-realm-leaf-naming`).
   gallery); a backend-only product would add one here later.
 - Its templates are copied into products, so they are MIT-licensed (`templates/`).
 
+## What is here
+
+- `pack.yaml`: the recipe (template, implementer prompt, the check ladder by name), the services
+  (Postgres and SeaweedFS, by digest) and the sandbox: a stack built from `devcontainer/`, and the hosts
+  the checks reach (the Go proxy and checksum database, the vulnerability databases).
+- `devcontainer/Containerfile`: the stack layer: Go 1.26.9, `golangci-lint`, `sqlc`, `oasdiff`, `vacuum`,
+  `osv-scanner` and `govulncheck`, every download checked against a recorded SHA-256, and the ladder's
+  scripts in `/opt/ygg/checks`, read-only for the agent. `ygg sandbox build --realm helheim-go` builds it.
+- `devcontainer/checks/`: the ladder: `go-static.sh` (gofmt, vet, lint, docs) and `go-unit.sh`,
+  `go-tdd.sh` (new tests fail on the commit the task started from), `go-contract.sh` (OpenAPI lint,
+  generated code, breaking changes), `go-security.sh` (`govulncheck`, OSV) and `go-integration.sh`
+  (tests that need Postgres). Rung 6 is the lead realm's reviewers; rung 7 is the grader's.
+- `templates/api/`: the leaf a new API starts from: a server with a health route, its contract, a
+  store with migrations and `sqlc`, and the rules of the leaf in its `AGENTS.md`.
+- `prompts/implementer.md`: what the implementer of a task in this leaf is told.
+
+## Tests
+
+`go test ./...` runs the scripts on small leaves made in a temp dir, with the real `go` and `git` and
+stand-ins for the image's tools; it builds and tests the template, which needs the Go module proxy the
+first time (set `YGG_REQUIRE_TEMPLATES` to fail instead of skipping when it cannot be reached). The
+image itself and the tools in it are checked on a real engine (Phase 5b, v0-H14).
+
 ## Depends on
 
 - Gungnir's schemas.

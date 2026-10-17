@@ -13,6 +13,12 @@ go test ./...
 go vet ./...
 ```
 
+## What it holds
+
+The recipe of a Go API leaf for the factory: a template, a stack image with the check ladder's tools, the
+ladder's scripts, an implementer prompt and the services an API needs. A run loads it by name from the realm
+store and builds its leaves in it. See [the architecture](docs/architecture.md).
+
 ## Docs
 
 - Architecture: [docs/architecture.md](docs/architecture.md)
