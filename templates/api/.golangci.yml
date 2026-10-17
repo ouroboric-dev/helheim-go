@@ -5,3 +5,10 @@ linters:
     - bodyclose
     - errorlint
     - gosec
+  exclusions:
+    # A "Code generated" header proves nothing, the agent can write one: no file is skipped for it. Only the
+    # files that sqlc writes are skipped, by path; `sqlc diff` (go-contract.sh) checks them against the SQL.
+    generated: disable
+    paths:
+      - internal/store/(db|models|querier)\.go$
+      - internal/store/[^/]+\.sql\.go$
