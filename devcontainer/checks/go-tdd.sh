@@ -17,11 +17,11 @@ tests=() code=() skipped=()
 while IFS= read -r f; do
   [ -f "$f" ] || continue
   if integration "$f"; then skipped+=("$f"); else tests+=("$f"); fi
-done < <(git diff --name-only --diff-filter=AM "$base" HEAD -- '*_test.go')
+done < <(git diff --no-renames --name-only --diff-filter=d "$base" HEAD -- '*_test.go')
 while IFS= read -r f; do
   [ -f "$f" ] || continue
   generated "$f" || code+=("$f")
-done < <(git diff --name-only --diff-filter=AM "$base" HEAD -- '*.go' ':!*_test.go')
+done < <(git diff --no-renames --name-only --diff-filter=d "$base" HEAD -- '*.go' ':!*_test.go')
 
 if [ ${#tests[@]} -eq 0 ]; then
   if [ ${#code[@]} -gt 0 ] && [ ${#skipped[@]} -eq 0 ]; then

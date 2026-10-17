@@ -352,3 +352,23 @@ func slicesWithout(env []string, prefix string) []string {
 	}
 	return out
 }
+
+// A moved file with new code in it is still new code (final review I-3): git's rename detection must not
+// hide it from the check.
+func TestTDDSeesACodeFileThatWasMovedAndChanged(t *testing.T) {
+	start := map[string]string{"go.mod": goMod, "a.go": aGo + "\n// pad pad pad pad pad pad pad pad\n// pad pad pad pad pad pad pad pad\n// pad pad pad pad pad pad pad pad\n// pad pad pad pad pad pad pad pad\n", "a_test.go": aTestGo}
+	dir := repo(t, start)
+	git(t, dir, "switch", "-q", "-c", "work")
+	git(t, dir, "mv", "a.go", "routes.go")
+	body := start["a.go"] + "\nfunc B() int { return 2 }\n"
+	put(t, dir, map[string]string{"routes.go": body})
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-q", "-m", "move")
+	if st := git(t, dir, "diff", "--name-status", "main", "HEAD"); !strings.HasPrefix(st, "R") {
+		t.Fatalf("the setup is not a rename:\n%s", st)
+	}
+	code, out := script(t, dir, "", "go-tdd.sh")
+	if code == 0 || !strings.Contains(out, "changed without a new or changed test") || !strings.Contains(out, "routes.go") {
+		t.Errorf("a moved file with new code and no test: exit %d\n%s", code, out)
+	}
+}
