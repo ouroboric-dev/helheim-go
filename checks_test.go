@@ -1,6 +1,7 @@
 package helheim
 
 import (
+	"archive/zip"
 	"bytes"
 	"net"
 	"os"
@@ -439,5 +440,89 @@ func TestStaticRefusesAChangeToTheLadderConfiguration(t *testing.T) {
 	git(t, dir, "commit", "-q", "-m", "drop")
 	if code, out := script(t, dir, stubs(t, "golangci-lint"), "go-static.sh"); code == 0 || !strings.Contains(out, ".golangci.yml") {
 		t.Errorf("a deleted configuration: exit %d\n%s", code, out)
+	}
+}
+
+// proxyModule writes a one-package module into a file proxy (no network), and returns the proxy's URL.
+func proxyModule(t *testing.T, path, version, src string) string {
+	t.Helper()
+	proxy := t.TempDir()
+	dir := filepath.Join(proxy, filepath.FromSlash(path), "@v")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mod := "module " + path + "\n\ngo 1.26\n"
+	var zbuf bytes.Buffer
+	zw := zip.NewWriter(&zbuf)
+	for name, body := range map[string]string{"go.mod": mod, "dep.go": src} {
+		w, err := zw.Create(path + "@" + version + "/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = w.Write([]byte(body))
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string][]byte{
+		version + ".zip":  zbuf.Bytes(),
+		version + ".mod":  []byte(mod),
+		version + ".info": []byte(`{"Version":"` + version + `","Time":"2026-01-01T00:00:00Z"}`),
+		"list":            []byte(version + "\n"),
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), body, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return "file://" + proxy
+}
+
+// The module cache is kept between runs and the agent can write it; a dependency edited there (an init that
+// exits 0 makes every failing test report ok) must fail the rung (final review N-1).
+func TestEveryGoCheckRefusesATamperedModuleCache(t *testing.T) {
+	proxyURL := proxyModule(t, "example.invalid/dep", "v1.0.0", "package dep\n\nfunc D() int { return 1 }\n")
+	cache := t.TempDir()
+	t.Cleanup(func() { _ = exec.Command("chmod", "-R", "u+w", cache).Run() }) // the cache is read-only
+	env := []string{"GOMODCACHE=" + cache, "GOPROXY=" + proxyURL, "GOSUMDB=off", "GONOSUMDB=*"}
+	files := map[string]string{
+		"go.mod":    "module t\n\ngo 1.26\n\nrequire example.invalid/dep v1.0.0\n",
+		"a.go":      "package t\n\nimport \"example.invalid/dep\"\n\nfunc A() int { return dep.D() }\n",
+		"a_test.go": "package t\n\nimport \"testing\"\n\nfunc TestA(t *testing.T) { t.Fatal(\"broken\") }\n",
+	}
+	dir := repo(t, files)
+	tidy := exec.Command("go", "mod", "tidy")
+	tidy.Dir = dir
+	tidy.Env = append(os.Environ(), append(env, "GOWORK=off", "GOFLAGS=-mod=mod")...)
+	if out, err := tidy.CombinedOutput(); err != nil {
+		t.Fatalf("go mod tidy: %v\n%s", err, out)
+	}
+	git(t, dir, "add", "go.sum")
+	git(t, dir, "commit", "-q", "-m", "sum")
+	git(t, dir, "switch", "-q", "-c", "work")
+	put(t, dir, map[string]string{"b.go": "package t\n"})
+	git(t, dir, "add", "b.go")
+	git(t, dir, "commit", "-q", "-m", "work")
+	names := []string{"go-static.sh", "go-unit.sh", "go-tdd.sh", "go-integration.sh", "go-security.sh"}
+	run := func(name string) (int, string) {
+		bin := stubs(t, "golangci-lint", "govulncheck", "osv-scanner")
+		return script(t, dir, bin, name, append([]string{"YGG_DB_WAIT=0"}, env...)...)
+	}
+	// With the cache as it was downloaded, none of them stops at the cache.
+	for _, name := range names {
+		if _, out := run(name); strings.Contains(out, "module cache") {
+			t.Errorf("%s refused an untouched cache:\n%s", name, out)
+		}
+	}
+	dep := filepath.Join(cache, "example.invalid", "dep@v1.0.0")
+	if err := exec.Command("chmod", "-R", "u+w", cache).Run(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dep, "evil.go"), []byte("package dep\n\nimport \"os\"\n\nfunc init() { os.Exit(0) }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range names {
+		if code, out := run(name); code == 0 || !strings.Contains(out, "module cache") {
+			t.Errorf("%s with a dependency edited in the cache: exit %d\n%s", name, code, out)
+		}
 	}
 }
