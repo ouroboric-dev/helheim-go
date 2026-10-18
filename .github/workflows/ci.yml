@@ -34,6 +34,6 @@ jobs:
         run: |
           useradd -m ci
           chown -R ci:ci "$GITHUB_WORKSPACE"
-          su ci -c 'GOWORK=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly YGG_REQUIRE_TEMPLATES=1 GOCACHE=/tmp/gocache go test -race ./...'
+          su ci -c 'GOWORK=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly YGG_REQUIRE_TEMPLATES=1 GOCACHE=/tmp/gocache GOMODCACHE=/tmp/gomodcache go test -race ./...'
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
