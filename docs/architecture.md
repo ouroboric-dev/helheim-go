@@ -35,7 +35,8 @@ proposal `2026-10-17-realm-leaf-naming`).
   `go-tdd.sh` (new tests fail on the commit the task started from), `go-contract.sh` (OpenAPI lint,
   generated code, breaking changes), `go-deps.sh` (the dependency policy: tagged releases only, the
   minimum patched versions of `config/deps-policy.json`, then the audits the policy names), `go-security.sh`
-  (`govulncheck`, OSV) and `go-integration.sh`
+  (`govulncheck`, OSV), `go-authz.sh` (the two-tenant harness: every route with a resource id has a passing
+  `TestCrossTenant<OperationId>`, read by `ygg-authz`, which the image builds from `devcontainer/checks/lib/authz`) and `go-integration.sh`
   (tests that need Postgres). Rung 6 is the lead realm's reviewers; rung 7 is the grader's.
 - `templates/api/`: the leaf a new API starts from: a server with a health route, its contract, a
   store with migrations and `sqlc`, and the rules of the leaf in its `AGENTS.md`.

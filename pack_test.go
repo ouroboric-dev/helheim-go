@@ -23,7 +23,7 @@ func TestThePackLoadsAndOffersTheRecipeEveryBuildRealmOffers(t *testing.T) {
 	if r == nil || r.Template != "templates/api" || r.Implementer != "prompts/implementer.md" {
 		t.Fatalf("leaf recipe = %+v", r)
 	}
-	want := []string{"static", "unit", "tdd", "contract", "deps", "security", "integration"}
+	want := []string{"static", "unit", "tdd", "contract", "deps", "security", "authz", "integration"}
 	if strings.Join(r.Checks, ",") != strings.Join(want, ",") {
 		t.Errorf("the ladder is %v, want %v: cheap rungs first, the one that needs services last", r.Checks, want)
 	}

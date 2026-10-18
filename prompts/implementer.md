@@ -27,6 +27,9 @@ and the test that proves it.
   JSON errors with the right status. Check that the caller may touch the resource in the handler, even
   if middleware checked it too. Build storage keys on the server from the user and the resource; never
   use a key a client sends.
+- **Cross-tenant test.** A route with a resource id in its path (`{id}`, `{photoId}`) needs a test
+  `TestCrossTenant<OperationId>` that calls `authztest.Check`: user A gets the resource, user B gets 403 or
+  404. The factory fails the change without it.
 - **Secrets.** Write none into code, tests, logs or docs. A test uses made-up values.
 
 ## Check your work before you stop
