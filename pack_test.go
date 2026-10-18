@@ -23,7 +23,7 @@ func TestThePackLoadsAndOffersTheRecipeEveryBuildRealmOffers(t *testing.T) {
 	if r == nil || r.Template != "templates/api" || r.Implementer != "prompts/implementer.md" {
 		t.Fatalf("leaf recipe = %+v", r)
 	}
-	want := []string{"static", "unit", "tdd", "contract", "security", "integration"}
+	want := []string{"static", "unit", "tdd", "contract", "deps", "security", "authz", "integration"}
 	if strings.Join(r.Checks, ",") != strings.Join(want, ",") {
 		t.Errorf("the ladder is %v, want %v: cheap rungs first, the one that needs services last", r.Checks, want)
 	}
@@ -58,8 +58,9 @@ func TestEveryCheckRunsAScriptThatTheStackImageBakesIn(t *testing.T) {
 	}
 	entries, _ := os.ReadDir(filepath.Join("devcontainer", "checks"))
 	for _, e := range entries {
-		// docs.sh and sqlc-owned.sh are run by the checks, and config/ is read by go-static.sh
-		used := e.Name() == "docs.sh" || e.Name() == "sqlc-owned.sh" || e.Name() == "config"
+		// docs.sh and sqlc-owned.sh are run by the checks, config/ is read by go-static.sh and go-deps.sh, and lib/ holds
+		// the helper go-deps.sh runs
+		used := e.Name() == "docs.sh" || e.Name() == "sqlc-owned.sh" || e.Name() == "config" || e.Name() == "lib"
 		for _, argv := range p.Checks {
 			used = used || filepath.Base(argv[0]) == e.Name()
 		}
@@ -115,5 +116,33 @@ func TestTheImplementerPromptTellsWhatTheFactoryChecksAndWhatNotToDo(t *testing.
 		if !strings.Contains(text, want) {
 			t.Errorf("the prompt lacks %q", want)
 		}
+	}
+}
+
+// helheim-go has no graph in v0: the lead realm's graph holds the pointer-contract gate and the move that
+// ships the routing indexes (midgard-react). What this realm owes routing is a contract Odin can find,
+// and an oasdiff in its image for the gate. Odin finds a contract by a file name that ends in openapi.yaml.
+func TestTheTemplatesContractIsNamedSoRoutingFindsIt(t *testing.T) {
+	var found []string
+	err := filepath.WalkDir("templates/api", func(p string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.Contains(d.Name(), "openapi") {
+			found = append(found, p)
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(found) == 0 {
+		t.Fatal("the api template holds no OpenAPI file")
+	}
+	for _, f := range found {
+		if !strings.HasSuffix(f, "openapi.yaml") {
+			t.Errorf("%s: routing finds a contract by a name that ends in openapi.yaml", f)
+		}
+	}
+	script, err := os.ReadFile("devcontainer/checks/go-contract.sh")
+	if err != nil || !strings.Contains(string(script), "oasdiff breaking") {
+		t.Errorf("go-contract.sh must run oasdiff breaking, the evidence the pointer-contract gate accepts beside extracted edges: %v", err)
 	}
 }

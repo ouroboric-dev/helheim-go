@@ -28,6 +28,21 @@ RUN GOBIN=/usr/local/bin GOFLAGS=-mod=mod GOTOOLCHAIN=local go install golang.or
  && go clean -cache -modcache \
  && rm -rf /go/pkg
 
+# ygg-authz reads openapi.yaml for go-authz.sh, the two-tenant authorisation harness. It is built from its
+# folder of this realm: its one dependency is at the version and hash in its go.sum (-mod=readonly refuses
+# anything else), and the binary lands in /usr/local/bin, owned by root.
+COPY checks/lib/authz/ /tmp/ygg-authz/
+RUN cd /tmp/ygg-authz && GOFLAGS=-mod=readonly GOTOOLCHAIN=local go build -o /usr/local/bin/ygg-authz . \
+ && cd / && rm -rf /tmp/ygg-authz && go clean -cache -modcache \
+ && rm -rf /go/pkg
+
+# ygg-deps is the dependency policy checker of go-deps.sh (standard library only). It is built here, into a root-owned
+# path, so the rung does not run a program from a cache the agent can write (`go run` would).
+COPY checks/lib/godeps.go /tmp/ygg-deps/godeps.go
+RUN cd /tmp/ygg-deps && GOTOOLCHAIN=local go build -o /usr/local/bin/ygg-deps godeps.go \
+ && cd / && rm -rf /tmp/ygg-deps && go clean -cache -modcache \
+ && rm -rf /go/pkg
+
 # The golang image puts /go/bin ahead of the tools on PATH and makes it world-writable, so the agent could
 # put its own go or golangci-lint there. Root owns it, and the check scripts fix their own PATH as well.
 RUN mkdir -p /go/bin && chown root:root /go/bin && chmod 0755 /go/bin

@@ -11,7 +11,7 @@ This file only adds rules for this leaf. Read `docs/` for the design; this file 
 - Build, test, lint: `go build ./...`, `go test -race ./...`, `go vet ./...`, `golangci-lint run`.
 - `go.mod` says `module api`. Imports are `api/internal/...`.
 - Standard library first: `net/http` with the Go 1.22 pattern mux. A new dependency needs a reason in
-  the commit message that the standard library cannot give.
+  the commit message that the standard library cannot give. A dependency is a tagged release: no pseudo-version, no `replace`.
 - The server listens on `PORT` and uses the database at `DATABASE_URL` when that is set. It reads nothing
   else from the environment that is not named in `docs/`.
 
@@ -27,6 +27,10 @@ This file only adds rules for this leaf. Read `docs/` for the design; this file 
   `internal/store`. The factory refuses a change whose generated code is out of date (`sqlc diff`).
 - **The server builds every storage key** from the logged-in user and the resource. It ignores keys a
   client sends. Authorisation is checked in the handler, not only in middleware.
+- **Every route with a path variable has a cross-tenant test.** Every path variable is a resource id,
+  whatever its name (`{id}`, `{album}`, `{uuid}`). A route with one needs a test `TestCrossTenant<OperationId>` that calls `authztest.Check`: user A gets
+  the resource, user B gets 403 or 404. The factory refuses a change without one. A route that anyone may
+  read on purpose is named, with the reason, in `authz.json` (`{"schema":"ygg.authz/v1","public":{"<operationId>":"<why>"}}`).
 - Errors answer JSON `{"error": "..."}` with the right status. A handler never leaks a stack trace, a
   query or a file path.
 - No secret in the repository, in a test or in a log line.

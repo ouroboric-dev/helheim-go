@@ -33,11 +33,32 @@ proposal `2026-10-17-realm-leaf-naming`).
   scripts in `/opt/ygg/checks`, read-only for the agent. `ygg sandbox build --realm helheim-go` builds it.
 - `devcontainer/checks/`: the ladder: `go-static.sh` (gofmt, vet, lint, docs) and `go-unit.sh`,
   `go-tdd.sh` (new tests fail on the commit the task started from), `go-contract.sh` (OpenAPI lint,
-  generated code, breaking changes), `go-security.sh` (`govulncheck`, OSV) and `go-integration.sh`
+  generated code, breaking changes), `go-deps.sh` (the dependency policy: tagged releases only, the
+  minimum patched versions of `config/deps-policy.json`, then the audits the policy names), `go-security.sh`
+  (`govulncheck`, OSV), `go-authz.sh` (the two-tenant harness: every route with a path variable (each is a resource id) has a passing
+  `TestCrossTenant<OperationId>`, read by `ygg-authz`, which the image builds from `devcontainer/checks/lib/authz`) and `go-integration.sh`
   (tests that need Postgres). Rung 6 is the lead realm's reviewers; rung 7 is the grader's.
 - `templates/api/`: the leaf a new API starts from: a server with a health route, its contract, a
   store with migrations and `sqlc`, and the rules of the leaf in its `AGENTS.md`.
 - `prompts/implementer.md`: what the implementer of a task in this leaf is told.
+
+## Routing
+
+This realm has no graph, so it adds no gate and ships no index. The lead realm's graph does both
+(`midgard-react`: the `contract-gate` and the `move` with `generated: [REPOS.md, .ygg/impact.json]`). Odin builds
+the wiring block of `REPOS.md` and `.ygg/impact.json` from the project, with no model (spec §8). What a Go leaf
+gives it, all read from files, so every edge is `extracted`:
+
+- `go.mod`: direct requirements (a `require` of another leaf's module is an edge to that leaf), and the pins
+  that `go.sum` confirms.
+- Go imports of another leaf's module.
+- Every file whose name ends in `openapi.yaml`: the leaf holds that contract. The template's contract is
+  `openapi.yaml`. Name any other contract the same way, or routing does not see it.
+- The services this pack names (`postgres`, `seaweedfs`).
+
+The `pointer-contract` gate judges a move that changes a contract by these edges or by `oasdiff`. `go-contract.sh`
+already runs `oasdiff breaking` in the leaf, and the image holds `oasdiff`. A contract change that only a guess
+reaches goes to a person.
 
 ## Tests
 
