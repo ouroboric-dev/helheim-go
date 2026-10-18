@@ -797,3 +797,27 @@ func TestEveryGoCheckRefusesATamperedModuleCache(t *testing.T) {
 		}
 	}
 }
+
+// The product's CI is a protected path too: an agent in a run must not weaken the checks the product's
+// people rely on. The refusal comes before the lint step, so no tool beyond go and git is needed.
+func TestStaticRefusesAWorkflowChange(t *testing.T) {
+	const wf = ".github/workflows/ci.yml"
+	start := map[string]string{"go.mod": goMod, "a.go": "package t\n", wf: "name: ci\n"}
+	cases := []struct {
+		name  string
+		start map[string]string
+		files map[string]string
+	}{
+		{"a workflow added", map[string]string{"go.mod": goMod, "a.go": "package t\n"}, map[string]string{wf: "name: ci\n"}},
+		{"a workflow changed", start, map[string]string{wf: "name: weaker\n"}},
+	}
+	for _, c := range cases {
+		dir := repo(t, c.start)
+		work(t, dir, c.files)
+		bin := stubs(t, "golangci-lint")
+		code, out := script(t, dir, bin, "go-static.sh")
+		if code == 0 || !strings.Contains(out, "protected") || !strings.Contains(out, wf) || calls(bin) != "" {
+			t.Errorf("%s: exit %d, calls %q\n%s", c.name, code, calls(bin), out)
+		}
+	}
+}

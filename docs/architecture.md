@@ -53,6 +53,15 @@ the devcontainer, without `go.work`, and runs `gofmt`, `go vet`, `go test -race`
 `govulncheck`. It sets `YGG_REQUIRE_TEMPLATES`, so the template tests fail instead of skipping when the
 module proxy cannot be reached. The pr-bot cannot change the workflow; the founder pushes changes to it.
 
+The API template carries its own CI, `templates/api/.github/workflows/ci.yml`, so a product has a check from
+its first commit. It has one job, `test`, in the same Go image, with the pack's Postgres beside it. It runs
+`gofmt`, `go vet`, `golangci-lint` v2.14.0 with the template's `.golangci.yml`, `go test -race`, the
+integration tests (`-tags integration`), and `govulncheck`. `TestTemplateCI` keeps it in step with the
+stack: the images, the golangci-lint release and its hash are read from `devcontainer/Containerfile` and
+`pack.yaml`. Rung 1 (`go-static.sh`) protects `.github/` as it does `.devcontainer/`, so only the product's
+people change the workflow, never an agent in a factory run. SeaweedFS is not started: today's template has
+no S3 test.
+
 ## Depends on
 
 - Gungnir's schemas.
