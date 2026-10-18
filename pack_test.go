@@ -23,7 +23,7 @@ func TestThePackLoadsAndOffersTheRecipeEveryBuildRealmOffers(t *testing.T) {
 	if r == nil || r.Template != "templates/api" || r.Implementer != "prompts/implementer.md" {
 		t.Fatalf("leaf recipe = %+v", r)
 	}
-	want := []string{"static", "unit", "tdd", "contract", "security", "integration"}
+	want := []string{"static", "unit", "tdd", "contract", "deps", "security", "integration"}
 	if strings.Join(r.Checks, ",") != strings.Join(want, ",") {
 		t.Errorf("the ladder is %v, want %v: cheap rungs first, the one that needs services last", r.Checks, want)
 	}
@@ -58,8 +58,9 @@ func TestEveryCheckRunsAScriptThatTheStackImageBakesIn(t *testing.T) {
 	}
 	entries, _ := os.ReadDir(filepath.Join("devcontainer", "checks"))
 	for _, e := range entries {
-		// docs.sh and sqlc-owned.sh are run by the checks, and config/ is read by go-static.sh
-		used := e.Name() == "docs.sh" || e.Name() == "sqlc-owned.sh" || e.Name() == "config"
+		// docs.sh and sqlc-owned.sh are run by the checks, config/ is read by go-static.sh and go-deps.sh, and lib/ holds
+		// the helper go-deps.sh runs
+		used := e.Name() == "docs.sh" || e.Name() == "sqlc-owned.sh" || e.Name() == "config" || e.Name() == "lib"
 		for _, argv := range p.Checks {
 			used = used || filepath.Base(argv[0]) == e.Name()
 		}

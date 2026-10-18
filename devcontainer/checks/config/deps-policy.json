@@ -1,0 +1,1 @@
+{"schema":"ygg.deps/v1","pin":"minor","minimum":{"golang.org/x/text":"0.42.0"},"audit":["govulncheck","osv"]}

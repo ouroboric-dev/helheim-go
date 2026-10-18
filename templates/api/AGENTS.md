@@ -11,7 +11,7 @@ This file only adds rules for this leaf. Read `docs/` for the design; this file 
 - Build, test, lint: `go build ./...`, `go test -race ./...`, `go vet ./...`, `golangci-lint run`.
 - `go.mod` says `module api`. Imports are `api/internal/...`.
 - Standard library first: `net/http` with the Go 1.22 pattern mux. A new dependency needs a reason in
-  the commit message that the standard library cannot give.
+  the commit message that the standard library cannot give. A dependency is a tagged release: no pseudo-version, no `replace`.
 - The server listens on `PORT` and uses the database at `DATABASE_URL` when that is set. It reads nothing
   else from the environment that is not named in `docs/`.
 

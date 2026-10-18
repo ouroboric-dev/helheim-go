@@ -773,7 +773,7 @@ func TestEveryGoCheckRefusesATamperedModuleCache(t *testing.T) {
 	put(t, dir, map[string]string{"b.go": "package t\n"})
 	git(t, dir, "add", "b.go")
 	git(t, dir, "commit", "-q", "-m", "work")
-	names := []string{"go-static.sh", "go-unit.sh", "go-tdd.sh", "go-integration.sh", "go-security.sh"}
+	names := []string{"go-static.sh", "go-unit.sh", "go-tdd.sh", "go-integration.sh", "go-security.sh", "go-deps.sh"}
 	run := func(name string) (int, string) {
 		bin := stubs(t, "golangci-lint", "govulncheck", "osv-scanner")
 		return script(t, dir, bin, name, append([]string{"YGG_DB_WAIT=0"}, env...)...)
