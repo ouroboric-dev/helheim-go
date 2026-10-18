@@ -27,8 +27,8 @@ This file only adds rules for this leaf. Read `docs/` for the design; this file 
   `internal/store`. The factory refuses a change whose generated code is out of date (`sqlc diff`).
 - **The server builds every storage key** from the logged-in user and the resource. It ignores keys a
   client sends. Authorisation is checked in the handler, not only in middleware.
-- **Every route with a resource id has a cross-tenant test.** A route whose path has a variable named `id`
-  or ending in `Id` needs a test `TestCrossTenant<OperationId>` that calls `authztest.Check`: user A gets
+- **Every route with a path variable has a cross-tenant test.** Every path variable is a resource id,
+  whatever its name (`{id}`, `{album}`, `{uuid}`). A route with one needs a test `TestCrossTenant<OperationId>` that calls `authztest.Check`: user A gets
   the resource, user B gets 403 or 404. The factory refuses a change without one. A route that anyone may
   read on purpose is named, with the reason, in `authz.json` (`{"schema":"ygg.authz/v1","public":{"<operationId>":"<why>"}}`).
 - Errors answer JSON `{"error": "..."}` with the right status. A handler never leaks a stack trace, a

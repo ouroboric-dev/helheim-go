@@ -3,13 +3,13 @@
 // go.sum, into /usr/local/bin where the agent cannot write.
 //
 //	ygg-authz plan  -spec openapi.yaml [-registry authz.json]
-//	    lists every operation that takes a resource id and the test it needs
+//	    lists every operation whose path has a variable and the test it needs
 //	ygg-authz check -spec openapi.yaml [-registry authz.json] -tests go-test.json
 //	    fails unless each of them has a passing TestCrossTenant<OperationId> in which user B got 403 or 404 and
 //	    user A got the resource. The answers are lines "YGG-AUTHZ {json}" that authztest.Check printed, which
 //	    go test -json carries in the output of the test
 //
-// A route takes a resource id when a variable of its path is named id, or ends in Id, ID, _id or -id.
+// A route takes a resource id when its path has a variable: every path variable is a resource id, whatever its name.
 package main
 
 import (
@@ -31,7 +31,6 @@ type operation struct{ ID, Method, Path, Test string }
 
 var (
 	pathVar  = regexp.MustCompile(`\{([^{}]+)\}`)
-	idName   = regexp.MustCompile(`^(id|.*(Id|ID|_id|-id))$`)
 	opName   = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*$`)
 	methods  = []string{"get", "put", "post", "delete", "options", "head", "patch", "trace"}
 	registry = struct {
@@ -111,10 +110,8 @@ func plan(specPath, regPath string) (ops []operation, public map[string]string, 
 			problems = append(problems, fmt.Sprintf("authz: %s is a $ref; write the path item in the file, so that its routes can be read", path))
 			continue
 		}
-		resource := false
-		for _, m := range pathVar.FindAllStringSubmatch(path, -1) {
-			resource = resource || idName.MatchString(m[1])
-		}
+		// Every path variable is a resource id, whatever its name.
+		resource := len(pathVar.FindAllStringSubmatch(path, -1)) > 0
 		for _, m := range methods {
 			n, ok := item[m]
 			if !ok {
@@ -178,7 +175,7 @@ func readRegistry(path string, all map[string]bool, problems []string) (map[stri
 		case !there:
 			problems = append(problems, fmt.Sprintf("authz: %s names %s, which is no operation of the contract; remove it", path, id))
 		case !resource:
-			problems = append(problems, fmt.Sprintf("authz: %s names %s, which takes no resource id; remove it", path, id))
+			problems = append(problems, fmt.Sprintf("authz: %s names %s, which has no path variable; remove it", path, id))
 		case len(strings.Fields(why)) < 2:
 			problems = append(problems, fmt.Sprintf("authz: %s gives %s no reason; say why anyone may read it", path, id))
 		}

@@ -10,7 +10,7 @@ import (
 )
 
 // go-authz.sh is the two-tenant authorisation harness (spec §9.5 rung 4, v0-T260): every route of openapi.yaml
-// that takes a resource id has a test TestCrossTenant<OperationId> that passes, in which user B asks for user
+// that has a path variable (every path variable is a resource id, whatever its name) has a test TestCrossTenant<OperationId> that passes, in which user B asks for user
 // A's resource and gets 403 or 404 while user A gets it. These tests run it on small leaves, with the real go and
 // the real ygg-authz (built here from devcontainer/checks/lib/authz, as the Containerfile builds it).
 
@@ -142,7 +142,7 @@ func TestAuthzPassesWhenEveryRouteWithAResourceIdHasACrossTenantTest(t *testing.
 		t.Fatalf("a covered route: exit %d\n%s", code, out)
 	}
 	if strings.Contains(out, "getHealth") {
-		t.Errorf("a route with no resource id was asked for a test:\n%s", out)
+		t.Errorf("a route with no path variable was asked for a test:\n%s", out)
 	}
 	dir = authzLeaf(t, map[string]string{"internal/photos/photos_test.go": crossTenant("getPhoto", "Handler(false, http.StatusForbidden)")})
 	if code, out := runAuthz(t, dir); code != 0 || !strings.Contains(out, "user B 403") {
@@ -213,14 +213,15 @@ paths: {
 	dir := authzLeaf(t, map[string]string{"openapi.yaml": spec})
 	_, out := runAuthz(t, dir)
 	for _, want := range []string{"require getA GET /a/{id} TestCrossTenantGetA", "require deleteA DELETE /a/{id} TestCrossTenantDeleteA",
-		"require putItem PUT /b/{galleryId}/items/{item_id} TestCrossTenantPutItem", "require postD POST /d/{photoID} TestCrossTenantPostD"} {
+		"require putItem PUT /b/{galleryId}/items/{item_id} TestCrossTenantPutItem", "require postD POST /d/{photoID} TestCrossTenantPostD",
+		"require getByToken GET /c/{token} TestCrossTenantGetByToken"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the plan lacks %q:\n%s", want, out)
 		}
 	}
-	for _, not := range []string{"getByToken", "listE"} {
+	for _, not := range []string{"listE"} {
 		if strings.Contains(out, "require "+not) {
-			t.Errorf("a route with no resource id is required to have a test: %s\n%s", not, out)
+			t.Errorf("a route with no path variable is required to have a test: %s\n%s", not, out)
 		}
 	}
 }
@@ -403,5 +404,49 @@ func TestAuthzJudgesEveryLineOfTheOperation(t *testing.T) {
 	code, out := runAuthz(t, authzLeaf(t, map[string]string{"internal/photos/photos_test.go": body}))
 	if code == 0 || !strings.Contains(out, "user B got 200") {
 		t.Errorf("a leaking line and then a good one: exit %d\n%s", code, out)
+	}
+}
+
+// Every path variable is a resource id, whatever its name (founder decision after the first review): a name
+// like {album}, {userid} or {uuid} does not let a route escape the cross-tenant test. Only a public mark with a
+// reason in authz.json excuses a route.
+func TestAuthzEveryPathVariableIsAResourceIdWhateverItsName(t *testing.T) {
+	spec := `openapi: 3.1.0
+info: {title: API, version: 0.1.0}
+paths:
+  /albums/{album}:
+    get: {operationId: getAlbum, responses: {"200": {description: ok}}}
+  /users/{userid}:
+    get: {operationId: getUser, responses: {"200": {description: ok}}}
+  /files/{uuid}:
+    get: {operationId: getFile, responses: {"200": {description: ok}}}
+  /plain:
+    get: {operationId: getPlain, responses: {"200": {description: ok}}}
+`
+	dir := authzLeaf(t, map[string]string{"openapi.yaml": spec})
+	code, out := runAuthz(t, dir)
+	if code == 0 {
+		t.Fatalf("routes with path variables and no test passed:\n%s", out)
+	}
+	for _, want := range []string{"missing getAlbum GET /albums/{album}", "missing getUser GET /users/{userid}", "missing getFile GET /files/{uuid}", "authz: 3 problem(s)"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the output lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "getPlain") {
+		t.Errorf("a route with no path variable was asked for a test:\n%s", out)
+	}
+	// A public mark with a reason excuses each of them, and is printed.
+	reg := `{"schema":"ygg.authz/v1","public":{"getAlbum":"albums are shown to everyone","getUser":"profiles are public by design","getFile":"a file link is the capability"}}`
+	dir = authzLeaf(t, map[string]string{"openapi.yaml": spec, "authz.json": reg})
+	code, out = runAuthz(t, dir)
+	if code != 0 || !strings.Contains(out, "public getAlbum: albums are shown to everyone") || !strings.Contains(out, "public getFile:") {
+		t.Errorf("public marks with a reason: exit %d\n%s", code, out)
+	}
+	// Without a reason the mark is refused, and the route stays uncovered.
+	reg = `{"schema":"ygg.authz/v1","public":{"getAlbum":"","getUser":"profiles are public by design","getFile":"a file link is the capability"}}`
+	dir = authzLeaf(t, map[string]string{"openapi.yaml": spec, "authz.json": reg})
+	if code, out := runAuthz(t, dir); code == 0 || !strings.Contains(out, "getAlbum no reason") {
+		t.Errorf("a mark with no reason: exit %d\n%s", code, out)
 	}
 }

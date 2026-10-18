@@ -1,5 +1,5 @@
 // Package authztest is the two-tenant check of the API: user B asks for a resource of user A and must not get
-// it. Every route of openapi.yaml with a resource id in its path has a test named TestCrossTenant<OperationId>
+// it. Every route of openapi.yaml with a variable in its path (each is a resource id) has a test named TestCrossTenant<OperationId>
 // that calls Check (the factory's rung go-authz.sh fails without one). Check does not trust a middleware: it
 // sends real requests to the handler the server runs.
 package authztest

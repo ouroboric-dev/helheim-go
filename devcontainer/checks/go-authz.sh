@@ -1,6 +1,6 @@
 #!/bin/bash
 # Rung 4 of the ladder for a Go leaf, the two-tenant authorisation harness (spec §9.5; v0-T260): every route of
-# openapi.yaml that takes a resource id has a test TestCrossTenant<OperationId> that passes, in which user B asks
+# openapi.yaml that has a path variable (every path variable is a resource id) has a test TestCrossTenant<OperationId> that passes, in which user B asks
 # for user A's resource and gets 403 or 404 while user A gets it (internal/authztest.Check prints both answers). The
 # only exceptions are the routes authz.json names as public, each with a reason, and they are listed here. The
 # reader of the contract is ygg-authz, which the image builds into /usr/local/bin. Run in the leaf's top folder.
