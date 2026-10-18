@@ -12,12 +12,13 @@ export PATH="${YGG_CHECKS_PATH:-/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin}"
   exit 1
 }
 echo "== protected paths"
-# The linters read configuration the agent could edit, and sqlc.yaml says what go-contract.sh and go-tdd.sh
-# check. Any change, addition or deletion of it, against the commit the task started from (main), turns a rung
-# green by itself (a .golangci.json beside .golangci.yml wins over it), so it is refused. This includes a file
-# not added to git yet.
+# The dev container's files are what a person's editor runs, so a change to them is refused, against the
+# commit the task started from (main). This includes a file not added to git yet. The linters read no
+# configuration of the leaf: golangci-lint gets the config baked beside this script (below), and sqlc is
+# read from the commit the task started from (sqlc-owned.sh), so a config swapped, hidden or edited in the
+# leaf changes nothing.
 if base="$(git merge-base HEAD main 2>/dev/null)"; then
-  protected=('.golangci.*' 'sqlc.*' '.devcontainer/')
+  protected=('.devcontainer/')
   changed="$({ git diff --no-renames --name-only --diff-filter=AMD "$base" -- "${protected[@]}"
     git ls-files --others --exclude-standard -- "${protected[@]}"; } | sort -u)"
   if [ -n "$changed" ]; then
@@ -38,6 +39,21 @@ echo "== go vet"
 go vet ./...
 go vet -tags integration ./...
 echo "== golangci-lint"
-golangci-lint run ./...
+# The config is the baked one plus a skip for each file verified as sqlc's own output (byte for byte what
+# sqlc generates from the base commit's sqlc.yaml). Any other file is linted, whatever its header says.
+tmp="$(mktemp -d)"
+trap 'rm -rf -- "$tmp"' EXIT
+conf="$tmp/golangci.yml"
+cp -- "$(dirname "$0")/config/golangci.yml" "$conf"
+owned="$("$(dirname "$0")/sqlc-owned.sh")"
+if [ -n "$owned" ]; then
+  echo "    paths:" >>"$conf"
+  while IFS= read -r f; do
+    # a regex for the whole relative path, in a single-quoted YAML string
+    esc="$(printf '%s' "$f" | sed -e 's/[][\\.*^$+?(){}|]/\\&/g' -e "s/'/''/g")"
+    printf "      - '^%s\$'\n" "$esc" >>"$conf"
+  done <<<"$owned"
+fi
+golangci-lint run --config "$conf" ./...
 echo "== docs"
 "$(dirname "$0")/docs.sh"

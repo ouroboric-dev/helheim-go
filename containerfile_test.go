@@ -87,6 +87,9 @@ func TestEveryCheckScriptIsExecutableAndShellcheckedByItsAuthor(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
 		p := filepath.Join("devcontainer", "checks", e.Name())
 		st, err := os.Stat(p)
 		if err != nil {
@@ -99,5 +102,24 @@ func TestEveryCheckScriptIsExecutableAndShellcheckedByItsAuthor(t *testing.T) {
 		if !strings.HasPrefix(string(b), "#!/bin/bash\n") || !strings.Contains(string(b), "set -euo pipefail") {
 			t.Errorf("%s does not start with #!/bin/bash and set -euo pipefail", p)
 		}
+	}
+}
+
+// The lint config is baked into /opt/ygg/checks/config with the scripts, where the agent cannot write: the
+// COPY takes the whole folder, and the scripts read the config from beside themselves (B-049).
+func TestTheLintConfigIsBakedWithTheScripts(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("devcontainer", "Containerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "COPY checks/ /opt/ygg/checks/") || !strings.Contains(string(b), "chmod -R a+rX,go-w /opt/ygg/checks") {
+		t.Error("the Containerfile does not copy the whole checks folder as read-only")
+	}
+	if _, err := os.Stat(filepath.Join("devcontainer", "checks", "config", "golangci.yml")); err != nil {
+		t.Error(err)
+	}
+	s, _ := os.ReadFile(filepath.Join("devcontainer", "checks", "go-static.sh"))
+	if !strings.Contains(string(s), `$(dirname "$0")/config/golangci.yml`) {
+		t.Error("go-static.sh does not read the config from beside itself")
 	}
 }
