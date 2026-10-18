@@ -18,7 +18,7 @@ echo "== protected paths"
 # read from the commit the task started from (sqlc-owned.sh), so a config swapped, hidden or edited in the
 # leaf changes nothing.
 if base="$(git merge-base HEAD main 2>/dev/null)"; then
-  protected=('.devcontainer/')
+  protected=('.devcontainer/' '.github/')
   changed="$({ git diff --no-renames --name-only --diff-filter=AMD "$base" -- "${protected[@]}"
     git ls-files --others --exclude-standard -- "${protected[@]}"; } | sort -u)"
   if [ -n "$changed" ]; then

@@ -1,0 +1,57 @@
+# CI of this product: the required check "test". It runs the stack's own commands on the stack's own
+# images (the Go image of the factory's dev container, Postgres as the integration tests expect it), so a
+# change that passes the factory's checks passes here. Only the product's people change this file, never an
+# agent in a factory run: rung 1 of the ladder refuses a change to .github/.
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: docker.io/library/golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c
+    services:
+      postgres:
+        image: docker.io/library/postgres:17.10-bookworm@sha256:9b18b78397054fce88a9552e9d5a3ad5bb7fd258c5b3cc1c5028e46373d6ea8f
+        env:
+          POSTGRES_DB: app
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd "pg_isready -U postgres -d app"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      GOWORK: "off"
+      GOTOOLCHAIN: local
+      GOFLAGS: -mod=readonly
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - name: vet
+        run: go vet ./... && go vet -tags integration ./...
+      - name: golangci-lint
+        # The release and hash of devcontainer/Containerfile in the factory.
+        run: |
+          cd /tmp
+          curl -fsSL -o gcl.tgz https://github.com/golangci/golangci-lint/releases/download/v2.14.0/golangci-lint-2.14.0-linux-amd64.tar.gz
+          echo "ab90aeb7b066f92a33415b638a50fe5344bbb75a0d32ad30cc248d88f81032ab  gcl.tgz" | sha256sum -c -
+          tar -xzf gcl.tgz --strip-components=1 -C /usr/local/bin golangci-lint-2.14.0-linux-amd64/golangci-lint
+          cd "$GITHUB_WORKSPACE"
+          golangci-lint run --config .golangci.yml ./...
+      - name: test
+        run: go test -race ./...
+      - name: integration
+        env:
+          YGG_DATABASE_URL: postgres://postgres@postgres:5432/app?sslmode=disable
+        run: go test -race -tags integration ./...
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
