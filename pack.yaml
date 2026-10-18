@@ -19,8 +19,8 @@ leaf:
   checks: [static, unit, tdd, contract, security, integration]
 services:
   postgres:
-    # yamllint disable-line rule:line-length
-    image: docker.io/library/postgres:17.10-bookworm@sha256:9b18b78397054fce88a9552e9d5a3ad5bb7fd258c5b3cc1c5028e46373d6ea8f
+    image: >-
+      docker.io/library/postgres:17.10-bookworm@sha256:9b18b78397054fce88a9552e9d5a3ad5bb7fd258c5b3cc1c5028e46373d6ea8f
     env:
       POSTGRES_DB: app
       POSTGRES_HOST_AUTH_METHOD: trust

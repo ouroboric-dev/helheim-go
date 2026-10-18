@@ -13,14 +13,13 @@ jobs:
   test:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    # The pinned image lines below are longer than 120 characters; ci_test.go reads each one whole.
-    # yamllint disable rule:line-length
     container:
-      image: docker.io/library/golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c
+      image: >-
+        docker.io/library/golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c
     services:
       postgres:
-        image: docker.io/library/postgres:17.10-bookworm@sha256:9b18b78397054fce88a9552e9d5a3ad5bb7fd258c5b3cc1c5028e46373d6ea8f
-        # yamllint enable rule:line-length
+        image: >-
+          docker.io/library/postgres:17.10-bookworm@sha256:9b18b78397054fce88a9552e9d5a3ad5bb7fd258c5b3cc1c5028e46373d6ea8f
         env:
           POSTGRES_DB: app
           POSTGRES_HOST_AUTH_METHOD: trust
@@ -34,7 +33,7 @@ jobs:
       GOTOOLCHAIN: local
       GOFLAGS: -mod=readonly
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
       - name: gofmt
