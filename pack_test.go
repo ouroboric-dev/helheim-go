@@ -118,3 +118,31 @@ func TestTheImplementerPromptTellsWhatTheFactoryChecksAndWhatNotToDo(t *testing.
 		}
 	}
 }
+
+// helheim-go has no graph in v0: the lead realm's graph holds the pointer-contract gate and the move that
+// ships the routing indexes (midgard-react). What this realm owes routing is a contract Odin can find,
+// and an oasdiff in its image for the gate. Odin finds a contract by a file name that ends in openapi.yaml.
+func TestTheTemplatesContractIsNamedSoRoutingFindsIt(t *testing.T) {
+	var found []string
+	err := filepath.WalkDir("templates/api", func(p string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.Contains(d.Name(), "openapi") {
+			found = append(found, p)
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(found) == 0 {
+		t.Fatal("the api template holds no OpenAPI file")
+	}
+	for _, f := range found {
+		if !strings.HasSuffix(f, "openapi.yaml") {
+			t.Errorf("%s: routing finds a contract by a name that ends in openapi.yaml", f)
+		}
+	}
+	script, err := os.ReadFile("devcontainer/checks/go-contract.sh")
+	if err != nil || !strings.Contains(string(script), "oasdiff breaking") {
+		t.Errorf("go-contract.sh must run oasdiff breaking, the evidence the pointer-contract gate accepts beside extracted edges: %v", err)
+	}
+}
