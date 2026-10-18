@@ -1,0 +1,18 @@
+# The lint config of a Go leaf. This copy is the source of truth: it is baked into the image at
+# /opt/ygg/checks/config, where the agent cannot write, and go-static.sh passes it to golangci-lint with
+# --config. templates/api/.golangci.yml is an identical copy for people's editors (a test pins them).
+# No path is named here: go-static.sh appends, under exclusions.paths, the files that sqlc-owned.sh verified
+# as sqlc's own output, and nothing else is skipped. Keep `exclusions:` and `generated: disable` last.
+version: "2"
+run:
+  # exclusion paths are relative to the folder the linter runs in, not the folder of this file
+  relative-path-mode: wd
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - gosec
+  exclusions:
+    # A "Code generated" header proves nothing, the agent can write one: no file is skipped for it.
+    generated: disable
