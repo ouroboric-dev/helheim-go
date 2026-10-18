@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -192,32 +193,68 @@ type event struct {
 type entry struct {
 	Operation, Test string
 	A, B            int
+
+	pkg string // the package whose test printed the line, from the test JSON, not from the line
 }
 
+// results holds what the JSON of `go test` said about the top-level tests, by package and name.
+type results struct {
+	passed, failed map[string]bool // key: package + "\x00" + test
+}
+
+func key(pkg, test string) string { return pkg + "\x00" + test }
+
 func check(ops []operation, testsPath string) (problems, more []string) {
-	passed, entries, failedOut, err := readTests(testsPath)
+	res, entries, failedOut, err := readTests(testsPath)
 	if err != nil {
 		return []string{"authz: " + err.Error()}, nil
 	}
 	for _, o := range ops {
 		label := fmt.Sprintf("%s %s %s", o.ID, o.Method, o.Path)
-		var got *entry
-		for i := range entries {
-			if entries[i].Operation == o.ID && entries[i].Test == o.Test {
-				got = &entries[i]
+		// A test of this name that failed in any package fails the operation, whatever another package's test of
+		// the same name did.
+		var ok []string
+		failed := ""
+		for k := range res.failed {
+			if pkg, test, _ := strings.Cut(k, "\x00"); test == o.Test {
+				failed = pkg
+			}
+		}
+		for k := range res.passed {
+			if pkg, test, _ := strings.Cut(k, "\x00"); test == o.Test {
+				ok = append(ok, pkg)
+			}
+		}
+		// Only a line printed by the test of that name, in a package where it passed, counts.
+		var got []entry
+		for _, en := range entries {
+			if en.Operation == o.ID && en.Test == o.Test && slices.Contains(ok, en.pkg) {
+				got = append(got, en)
 			}
 		}
 		switch {
-		case !passed[o.Test]:
+		case failed != "":
+			problems = append(problems, fmt.Sprintf("missing %s: test %s failed in %s", label, o.Test, failed))
+		case len(ok) == 0:
 			problems = append(problems, fmt.Sprintf("missing %s: no passing test %s", label, o.Test))
-		case got == nil:
+		case len(got) == 0:
 			problems = append(problems, fmt.Sprintf("missing %s: %s passed without a request of user B; call authztest.Check with Operation %q", label, o.Test, o.ID))
-		case got.A < 200 || got.A > 299:
-			problems = append(problems, fmt.Sprintf("missing %s: user A got %d, want 2xx; use a resource of user A", label, got.A))
-		case got.B != 403 && got.B != 404:
-			problems = append(problems, fmt.Sprintf("missing %s: user B got %d, want 403 or 404", label, got.B))
 		default:
-			fmt.Printf("covered %s (%s: user A %d, user B %d)\n", o.ID, o.Test, got.A, got.B)
+			bad := false
+			for _, g := range got {
+				switch {
+				case g.A < 200 || g.A > 299:
+					problems = append(problems, fmt.Sprintf("missing %s: user A got %d, want 2xx; use a resource of user A", label, g.A))
+					bad = true
+				case g.B != 403 && g.B != 404:
+					problems = append(problems, fmt.Sprintf("missing %s: user B got %d, want 403 or 404", label, g.B))
+					bad = true
+				}
+			}
+			if !bad {
+				last := got[len(got)-1]
+				fmt.Printf("covered %s (%s: user A %d, user B %d)\n", o.ID, o.Test, last.A, last.B)
+			}
 		}
 	}
 	if len(problems) > 0 {
@@ -226,15 +263,15 @@ func check(ops []operation, testsPath string) (problems, more []string) {
 	return problems, more
 }
 
-// readTests returns the top-level tests that passed and the output that is not a pass: what failed, and what
-// a package that did not build said.
-func readTests(path string) (passed map[string]bool, entries []entry, out []string, err error) {
+// readTests returns the top-level tests that passed and failed, by package, and the output that is not a pass:
+// what failed, and what a package that did not build said.
+func readTests(path string) (res results, entries []entry, out []string, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, nil, nil, err
+		return res, nil, nil, err
 	}
 	defer f.Close()
-	passed = map[string]bool{}
+	res = results{passed: map[string]bool{}, failed: map[string]bool{}}
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1<<20), 1<<24)
 	for sc.Scan() {
@@ -245,12 +282,14 @@ func readTests(path string) (passed map[string]bool, entries []entry, out []stri
 		top, _, _ := strings.Cut(e.Test, "/")
 		switch {
 		case e.Action == "pass" && e.Test != "" && e.Test == top:
-			passed[top] = true
+			res.passed[key(e.Package, top)] = true
 		case e.Action == "fail" && e.Test != "":
-			delete(passed, top)
+			res.failed[key(e.Package, top)] = true
 		case e.Action == "output" && strings.HasPrefix(e.Output, "YGG-AUTHZ "):
 			var en entry
-			if json.Unmarshal([]byte(strings.TrimPrefix(e.Output, "YGG-AUTHZ ")), &en) == nil {
+			t, _, _ := strings.Cut(e.Test, "/")
+			if json.Unmarshal([]byte(strings.TrimPrefix(e.Output, "YGG-AUTHZ ")), &en) == nil && en.Test == t {
+				en.pkg = e.Package
 				entries = append(entries, en)
 			}
 		case e.Action == "output" && strings.TrimSpace(e.Output) != "" && !strings.HasPrefix(e.Output, "=== ") &&
@@ -261,7 +300,7 @@ func readTests(path string) (passed map[string]bool, entries []entry, out []stri
 	if len(out) > 40 {
 		out = append(out[:40], "... more output left out")
 	}
-	return passed, entries, out, sc.Err()
+	return res, entries, out, sc.Err()
 }
 
 func sortedKeys(m map[string]string) []string {

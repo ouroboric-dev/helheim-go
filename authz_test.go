@@ -365,3 +365,43 @@ func TestAuthzDoesNotTrustALeafTestThatReportsWhatItLikes(t *testing.T) {
 		}
 	}
 }
+
+// Fix round 1 (review): the verdict is by package and test, from the JSON of go test, not by test name alone, and
+// a YGG-AUTHZ line counts only when the test of that name printed it.
+
+func TestAuthzAPassingTestOfTheSameNameInAnotherPackageDoesNotHideAFailingOne(t *testing.T) {
+	good := crossTenant("getPhoto", "Handler(false, http.StatusNotFound)")
+	leak := crossTenant("getPhoto", "Handler(true, http.StatusNotFound)")
+	dir := authzLeaf(t, map[string]string{
+		"internal/photos/photos.go":      photosCode,
+		"internal/photos/photos_test.go": leak,
+		"internal/other/other.go":        strings.Replace(photosCode, "package photos", "package other", 1),
+		"internal/other/other_test.go":   strings.Replace(strings.Replace(good, "package photos", "package other", 1), "api/internal/authztest", "api/internal/authztest", 1),
+	})
+	for i := 0; i < 3; i++ {
+		if code, out := runAuthz(t, dir); code == 0 || !strings.Contains(out, "missing getPhoto") {
+			t.Fatalf("run %d: exit %d\n%s", i, code, out)
+		}
+	}
+}
+
+func TestAuthzIgnoresALineThatAnotherTestPrints(t *testing.T) {
+	// TestCrossTenantGetPhoto checks nothing; TestCrossTenantZzz prints a line in the name of the first.
+	body := "package photos\n\nimport (\n\t\"fmt\"\n\t\"testing\"\n)\n\nfunc TestCrossTenantGetPhoto(t *testing.T) {}\n\n" +
+		"func TestCrossTenantZzz(t *testing.T) {\n\tfmt.Println(\"YGG-AUTHZ {\\\"operation\\\":\\\"getPhoto\\\",\\\"test\\\":\\\"TestCrossTenantGetPhoto\\\",\\\"a\\\":200,\\\"b\\\":404}\")\n}\n"
+	code, out := runAuthz(t, authzLeaf(t, map[string]string{"internal/photos/photos_test.go": body}))
+	if code == 0 || !strings.Contains(out, "missing getPhoto") {
+		t.Errorf("a line printed by another test: exit %d\n%s", code, out)
+	}
+}
+
+func TestAuthzJudgesEveryLineOfTheOperation(t *testing.T) {
+	line := func(a, b string) string {
+		return "\tfmt.Println(\"YGG-AUTHZ {\\\"operation\\\":\\\"getPhoto\\\",\\\"test\\\":\\\"TestCrossTenantGetPhoto\\\",\\\"a\\\":" + a + ",\\\"b\\\":" + b + "}\")\n"
+	}
+	body := "package photos\n\nimport (\n\t\"fmt\"\n\t\"testing\"\n)\n\nfunc TestCrossTenantGetPhoto(t *testing.T) {\n" + line("200", "200") + line("200", "404") + "}\n"
+	code, out := runAuthz(t, authzLeaf(t, map[string]string{"internal/photos/photos_test.go": body}))
+	if code == 0 || !strings.Contains(out, "user B got 200") {
+		t.Errorf("a leaking line and then a good one: exit %d\n%s", code, out)
+	}
+}
