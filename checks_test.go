@@ -776,6 +776,7 @@ func TestEveryGoCheckRefusesATamperedModuleCache(t *testing.T) {
 	names := []string{"go-static.sh", "go-unit.sh", "go-tdd.sh", "go-integration.sh", "go-security.sh", "go-deps.sh"}
 	run := func(name string) (int, string) {
 		bin := stubs(t, "golangci-lint", "govulncheck", "osv-scanner")
+		copyDepsTool(t, bin)
 		return script(t, dir, bin, name, append([]string{"YGG_DB_WAIT=0"}, env...)...)
 	}
 	// With the cache as it was downloaded, none of them stops at the cache.

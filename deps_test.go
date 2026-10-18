@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -15,7 +16,7 @@ import (
 const goModWith = "module t\n\ngo 1.26\n\n"
 
 func TestDepsPassesACleanLeafAndRunsTheAuditsThePolicyNames(t *testing.T) {
-	bin := stubs(t, "govulncheck", "osv-scanner")
+	bin := depsStubs(t)
 	code, out := script(t, leaf(t, map[string]string{"go.mod": goMod}), bin, "go-deps.sh")
 	if code != 0 || !strings.Contains(out, "deps policy: ok") {
 		t.Fatalf("a clean leaf: exit %d\n%s", code, out)
@@ -26,7 +27,7 @@ func TestDepsPassesACleanLeafAndRunsTheAuditsThePolicyNames(t *testing.T) {
 		}
 	}
 	for _, env := range []string{"STUB_GOVULNCHECK_EXIT=3", "STUB_OSV_SCANNER_EXIT=1"} {
-		if code, _ := script(t, leaf(t, map[string]string{"go.mod": goMod}), stubs(t, "govulncheck", "osv-scanner"), "go-deps.sh", env); code == 0 {
+		if code, _ := script(t, leaf(t, map[string]string{"go.mod": goMod}), depsStubs(t), "go-deps.sh", env); code == 0 {
 			t.Errorf("%s passed", env)
 		}
 	}
@@ -43,7 +44,7 @@ func TestDepsRefusesWhatIsNotPinnedToATaggedVersionAndWhatIsBelowTheMinimum(t *t
 		{"x/text far below the minimum", "require golang.org/x/text v0.9.0\n", "golang.org/x/text v0.9.0 is below the minimum 0.42.0"},
 	}
 	for _, c := range cases {
-		bin := stubs(t, "govulncheck", "osv-scanner")
+		bin := depsStubs(t)
 		code, out := script(t, leaf(t, map[string]string{"go.mod": goModWith + c.mod}), bin, "go-deps.sh")
 		if code == 0 || !strings.Contains(out, c.want) {
 			t.Errorf("%s: exit %d, want %q in:\n%s", c.name, code, c.want, out)
@@ -68,7 +69,7 @@ func TestDepsListsEveryProblemAndNeverReadsAPolicyOfTheLeaf(t *testing.T) {
 		"deps-policy.json": `{"schema":"ygg.deps/v1","pin":"minor","minimum":{},"audit":[]}`,
 		"devcontainer/checks/config/deps-policy.json": `{"schema":"ygg.deps/v1","pin":"minor","minimum":{},"audit":[]}`,
 	}
-	code, out := script(t, leaf(t, files), stubs(t, "govulncheck", "osv-scanner"), "go-deps.sh")
+	code, out := script(t, leaf(t, files), depsStubs(t), "go-deps.sh")
 	if code == 0 {
 		t.Fatalf("a leaf with its own policy passed:\n%s", out)
 	}
@@ -121,7 +122,7 @@ func TestDepsCheckerRefusesAPolicyItDoesNotKnow(t *testing.T) {
 func TestDepsPassesTheUnchangedTemplateWithTheRealGo(t *testing.T) {
 	dir := copyTemplate(t, "api")
 	needModules(t, dir)
-	code, out := script(t, dir, stubs(t, "govulncheck", "osv-scanner"), "go-deps.sh")
+	code, out := script(t, dir, depsStubs(t), "go-deps.sh")
 	if code != 0 || !strings.Contains(out, "deps policy: ok") {
 		t.Errorf("the template: exit %d\n%s", code, out)
 	}
@@ -140,5 +141,85 @@ func TestTheBakedDepsPolicyIsValidAndTheChecksRunIt(t *testing.T) {
 	s, _ := os.ReadFile(filepath.Join("devcontainer", "checks", "go-deps.sh"))
 	if !strings.Contains(string(s), `"$here/config/deps-policy.json"`) {
 		t.Error("go-deps.sh does not read the policy from from beside itself, through $here")
+	}
+}
+
+var (
+	depsOnce sync.Once
+	depsPath string
+	depsErr  error
+)
+
+// copyDepsTool builds ygg-deps (as the Containerfile does, from lib/godeps.go) once and copies it into bin.
+func copyDepsTool(t *testing.T, bin string) {
+	t.Helper()
+	depsOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "ygg-deps")
+		if err != nil {
+			depsErr = err
+			return
+		}
+		depsPath = filepath.Join(dir, "ygg-deps")
+		src, _ := filepath.Abs(filepath.Join("devcontainer", "checks", "lib", "godeps.go"))
+		cmd := exec.Command("go", "build", "-o", depsPath, src)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GOWORK=off")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			depsErr = &buildError{err, string(out)}
+		}
+	})
+	if depsErr != nil {
+		t.Fatal(depsErr)
+	}
+	b, err := os.ReadFile(depsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "ygg-deps"), b, 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// depsStubs is the stand-ins for the two audit tools, and the real ygg-deps.
+func depsStubs(t *testing.T) string {
+	t.Helper()
+	bin := stubs(t, "govulncheck", "osv-scanner")
+	copyDepsTool(t, bin)
+	return bin
+}
+
+// An audit call that fails must stop the rung: the loop over its answer must not run on an empty list.
+func TestDepsFailsWhenTheAuditCallFails(t *testing.T) {
+	bin := depsStubs(t)
+	real := filepath.Join(bin, "ygg-deps-real")
+	if err := os.Rename(filepath.Join(bin, "ygg-deps"), real); err != nil {
+		t.Fatal(err)
+	}
+	wrapper := "#!/bin/sh\n[ \"$1\" != audit ] || { echo audit broke; exit 3; }\nexec " + real + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "ygg-deps"), []byte(wrapper), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	code, out := script(t, leaf(t, map[string]string{"go.mod": goMod}), bin, "go-deps.sh")
+	if code == 0 {
+		t.Errorf("the rung passed although the audit call failed:\n%s", out)
+	}
+	if calls(bin) != "" {
+		t.Errorf("an audit tool ran: %s", calls(bin))
+	}
+}
+
+func TestTheDepsCheckerIsBuiltIntoTheImageNotRunFromTheCache(t *testing.T) {
+	cf := mustRead(t, filepath.Join("devcontainer", "Containerfile"))
+	for _, want := range []string{"COPY checks/lib/godeps.go /tmp/ygg-deps/godeps.go", "-o /usr/local/bin/ygg-deps godeps.go"} {
+		if !strings.Contains(cf, want) {
+			t.Errorf("the Containerfile lacks %q", want)
+		}
+	}
+	s := mustRead(t, filepath.Join("devcontainer", "checks", "go-deps.sh"))
+	if strings.Contains(s, "go run") {
+		t.Error("go-deps.sh runs the checker with go run, from a cache the agent can write")
+	}
+	if !strings.Contains(s, `tools="$(ygg-deps audit`) {
+		t.Error("go-deps.sh does not take the audit list into a variable first, so a failing call fails open")
 	}
 }
