@@ -13,6 +13,8 @@ go test ./...
 go vet ./...
 ```
 
+The required check `test` runs `gofmt`, `go vet`, `go test -race` as a non-root user, and `govulncheck`.
+
 ## What it holds
 
 The recipe of a Go API leaf for the factory: a template, a stack image with the check ladder's tools, the
