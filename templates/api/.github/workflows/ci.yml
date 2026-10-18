@@ -13,11 +13,14 @@ jobs:
   test:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # The pinned image lines below are longer than 120 characters; ci_test.go reads each one whole.
+    # yamllint disable rule:line-length
     container:
       image: docker.io/library/golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c
     services:
       postgres:
         image: docker.io/library/postgres:17.10-bookworm@sha256:9b18b78397054fce88a9552e9d5a3ad5bb7fd258c5b3cc1c5028e46373d6ea8f
+        # yamllint enable rule:line-length
         env:
           POSTGRES_DB: app
           POSTGRES_HOST_AUTH_METHOD: trust
@@ -42,7 +45,8 @@ jobs:
         # The release and hash of devcontainer/Containerfile in the factory.
         run: |
           cd /tmp
-          curl -fsSL -o gcl.tgz https://github.com/golangci/golangci-lint/releases/download/v2.14.0/golangci-lint-2.14.0-linux-amd64.tar.gz
+          curl -fsSL -o gcl.tgz \
+            https://github.com/golangci/golangci-lint/releases/download/v2.14.0/golangci-lint-2.14.0-linux-amd64.tar.gz
           echo "ab90aeb7b066f92a33415b638a50fe5344bbb75a0d32ad30cc248d88f81032ab  gcl.tgz" | sha256sum -c -
           tar -xzf gcl.tgz --strip-components=1 -C /usr/local/bin golangci-lint-2.14.0-linux-amd64/golangci-lint
           cd "$GITHUB_WORKSPACE"

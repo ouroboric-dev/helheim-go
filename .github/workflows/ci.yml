@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     container:
+      # yamllint disable-line rule:line-length
       image: docker.io/library/golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c
     env:
       GOWORK: "off"
@@ -22,7 +23,7 @@ jobs:
       GOFLAGS: -mod=readonly
       YGG_REQUIRE_TEMPLATES: "1"
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
       - name: gofmt
@@ -34,6 +35,7 @@ jobs:
         run: |
           useradd -m ci
           chown -R ci:ci "$GITHUB_WORKSPACE"
-          su ci -c 'GOWORK=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly YGG_REQUIRE_TEMPLATES=1 GOCACHE=/tmp/gocache GOMODCACHE=/tmp/gomodcache go test -race -v ./...'
+          su ci -c 'GOWORK=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly YGG_REQUIRE_TEMPLATES=1 \
+            GOCACHE=/tmp/gocache GOMODCACHE=/tmp/gomodcache go test -race -v ./...'
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
