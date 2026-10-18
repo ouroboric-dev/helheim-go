@@ -3,7 +3,7 @@
 The Helheim realm's Go flavor: prompts, devcontainer stack layer and services, templates and checks for backends.
 
 Follow the Yggdrasil invariants:
-https://github.com/ouroboric-dev/yggdrasil/blob/main/AGENTS.md#invariants
+<https://github.com/ouroboric-dev/yggdrasil/blob/main/AGENTS.md#invariants>
 This file only adds rules for this repo.
 
 ## This repo

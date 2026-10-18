@@ -33,7 +33,7 @@ and the test that proves it.
 
 Run these in the repository and fix what they say:
 
-```
+```text
 gofmt -l .          # prints nothing
 go vet ./...
 go test -race ./...
