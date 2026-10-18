@@ -48,7 +48,7 @@ func TestTemplateCI(t *testing.T) {
 	if len(uses) == 0 {
 		t.Error("the workflow uses no action; it should check out the code")
 	}
-	pinned := regexp.MustCompile(`@[0-9a-f]{40} # v`)
+	pinned := regexp.MustCompile(`@[0-9a-f]{40}\s+# v`)
 	for _, u := range uses {
 		if !pinned.MatchString(u) {
 			t.Errorf("%q is not pinned by a full commit SHA with its version in a comment", strings.TrimSpace(u))
@@ -57,7 +57,7 @@ func TestTemplateCI(t *testing.T) {
 
 	// the job runs in the image of the stack stage
 	stack := first(t, cf, `(?m)^FROM (\S+) AS stack\s*$`, "the stack stage of devcontainer/Containerfile")[1]
-	if got := first(t, wf, `(?m)^    container:\n      image: (\S+)\s*$`, "the job container")[1]; got != stack {
+	if got := first(t, wf, `(?m)^    container:\n      image: (?:>-\n        )?(\S+)\s*$`, "the job container")[1]; got != stack {
 		t.Errorf("container image = %s, want the stack's %s", got, stack)
 	}
 
@@ -76,7 +76,7 @@ func TestTemplateCI(t *testing.T) {
 		t.Fatal("pack.yaml has no postgres service")
 	}
 	svc := first(t, wf, `(?m)^    services:\n((?:      .*\n)+)`, "the services")[1]
-	if got := first(t, svc, `(?m)^      postgres:\n        image: (\S+)\s*$`, "the postgres service")[1]; got != pg {
+	if got := first(t, svc, `(?m)^      postgres:\n        image: (?:>-\n          )?(\S+)\s*$`, "the postgres service")[1]; got != pg {
 		t.Errorf("postgres image = %s, want pack.yaml's %s", got, pg)
 	}
 	for _, want := range []string{"POSTGRES_DB: app", "POSTGRES_HOST_AUTH_METHOD: trust", "pg_isready"} {
