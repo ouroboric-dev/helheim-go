@@ -20,7 +20,7 @@ proposal `2026-10-17-realm-leaf-naming`).
   prompt, the Go devcontainer stack layer with the services an API needs (Postgres, SeaweedFS), the
   api leaf template and its checks, under the role names every build realm shares.
 - Holds no graph in v0. A run takes its graph from the graph pack it names (Voluspa's `software`
-  for the client gallery); a backend-only product would add one here later.
+  for the client gallery); a backend-only product would get its own graph in Voluspa, not here.
 - Its templates are copied into products, so they are MIT-licensed (`templates/`).
 
 ## What is here
