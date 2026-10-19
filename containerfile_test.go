@@ -87,7 +87,7 @@ func TestEveryCheckScriptIsExecutableAndShellcheckedByItsAuthor(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
-		if e.IsDir() {
+		if e.IsDir() || e.Name() == "protected-common" { // the list of protected files is data, not a script
 			continue
 		}
 		p := filepath.Join("devcontainer", "checks", e.Name())

@@ -31,6 +31,13 @@ proposal `2026-10-17-realm-leaf-naming`).
 - `devcontainer/Containerfile`: the stack layer: Go 1.26.9, `golangci-lint`, `sqlc`, `oasdiff`, `vacuum`,
   `osv-scanner` and `govulncheck`, every download checked against a recorded SHA-256, and the ladder's
   scripts in `/opt/ygg/checks`, read-only for the agent. `ygg sandbox build --realm helheim-go` builds it.
+- `devcontainer/checks/protected-common`: the files that configure the checks of every product, one git
+  pathspec a line: the CI and dev container, `.pre-commit-config.yaml`, the markdown, YAML, shell and
+  secret-scan configs, and the licensing files. Rung 1 adds the Go lint configs (`.golangci.*`) and refuses
+  a task's change to any of them: added, changed, deleted, moved, swapped for a symlink, untracked or
+  ignored by `.gitignore`, against `main`. With no `main`, or a missing or empty list, the rung fails. The
+  file is shared: the web realm keeps a byte-for-byte copy, and `check-repos.sh --check shared` fails when
+  they differ. The Containerfile bakes it with the folder into `/opt/ygg/checks`.
 - `devcontainer/checks/`: the ladder: `go-static.sh` (gofmt, vet, lint, docs) and `go-unit.sh`,
   `go-tdd.sh` (new tests fail on the commit the task started from), `go-contract.sh` (OpenAPI lint,
   generated code, breaking changes), `go-deps.sh` (the dependency policy: tagged releases only, the
