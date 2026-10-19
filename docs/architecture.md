@@ -35,8 +35,12 @@ proposal `2026-10-17-realm-leaf-naming`).
   pathspec a line: the CI and dev container, `.pre-commit-config.yaml`, the markdown, YAML, shell and
   secret-scan configs, and the licensing files. Rung 1 adds the Go lint configs (`.golangci.*`) and refuses
   a task's change to any of them: added, changed, deleted, moved, swapped for a symlink, untracked or
-  ignored by `.gitignore`, against `main`. With no `main`, or a missing or empty list, the rung fails. The
-  file is shared: the web realm keeps a byte-for-byte copy, and `check-repos.sh --check shared` fails when
+  ignored by `.gitignore`, against `main` (the branch: a tag or another ref called `main` does not count).
+  The `**/` entries skip `node_modules/`, where installed packages keep config files of their own, in the
+  listing of untracked files only: a tracked file there is a change. The root-anchored entries (`.github/`,
+  `.devcontainer/`, `.reuse/`, `LICENSES/`) skip nothing, and go to `git` without their trailing slash, so a
+  folder swapped for a symlink is caught too. With no `main`, a missing or empty list, or a failing `git`, the
+  rung fails. The file is shared: the web realm keeps a byte-for-byte copy, and `check-repos.sh --check shared` fails when
   they differ. The Containerfile bakes it with the folder into `/opt/ygg/checks`.
 - `devcontainer/checks/`: the ladder: `go-static.sh` (gofmt, vet, lint, docs) and `go-unit.sh`,
   `go-tdd.sh` (new tests fail on the commit the task started from), `go-contract.sh` (OpenAPI lint,
