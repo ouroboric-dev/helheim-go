@@ -19,8 +19,9 @@ echo "== protected paths"
 # not added to git yet, or hidden by .gitignore. The linters read no configuration of the leaf: golangci-lint
 # gets the config baked beside this script (below), and sqlc is read from the commit the task started from
 # (sqlc-owned.sh), so a config swapped, hidden or edited in the leaf changes nothing. With no main to compare
-# to, or no list, the rung fails: it never passes unchecked.
-if ! base="$(git merge-base HEAD main 2>/dev/null)"; then
+# to (a branch called main: a tag or any other ref of that name does not count), or no list, the rung fails: it
+# never passes unchecked.
+if ! base="$(git merge-base HEAD refs/heads/main 2>/dev/null)"; then
   echo "static: there is no main branch to compare this task with, so the protected files cannot be checked."
   echo "Make the commit the task started from a branch called main."
   exit 1
@@ -45,9 +46,9 @@ if [ "$((${#roots[@]} + ${#globs[@]}))" -eq 0 ]; then
 fi
 globs+=(':(glob)**/.golangci.yml' ':(glob)**/.golangci.yaml' ':(glob)**/.golangci.toml' ':(glob)**/.golangci.json')
 # Installed packages carry their own config files and no tool reads one from there for the leaf, so the glob
-# entries skip node_modules. The root-anchored entries (.github/, .devcontainer/, ...) do not: whatever is in
-# them is protected.
-globs+=(':(exclude,glob)**/node_modules/**')
+# entries skip node_modules, in the listing of the files git does not track only: a tracked file is a change
+# wherever it is. The root-anchored entries (.github/, .devcontainer/, ...) skip nothing: whatever is in them is
+# protected.
 # No --diff-filter (a type change is a change), and no --exclude-standard (an ignored file is listed too).
 # Each git command is checked: a failing one fails the rung.
 gitfail() {
@@ -55,18 +56,20 @@ gitfail() {
   exit 1
 }
 changed=""
+# The root folders go to git without their trailing slash: a pathspec with one matches a folder only, so a
+# folder added as a symlink would pass. A plain folder name matches the folder and all that is in it.
 if [ "${#roots[@]}" -gt 0 ]; then
-  changed+="$(git diff --no-renames --name-only "$base" -- "${roots[@]}")" || gitfail diff
-  changed+=$'\n'"$(git ls-files --others -- "${roots[@]}")" || gitfail ls-files
+  changed+="$(git diff --no-renames --name-only "$base" -- "${roots[@]%/}")" || gitfail diff
+  changed+=$'\n'"$(git ls-files --others -- "${roots[@]%/}")" || gitfail ls-files
 fi
-if [ "${#globs[@]}" -gt 1 ]; then
+if [ "${#globs[@]}" -gt 0 ]; then
   changed+=$'\n'"$(git diff --no-renames --name-only "$base" -- "${globs[@]}")" || gitfail diff
-  changed+=$'\n'"$(git ls-files --others -- "${globs[@]}")" || gitfail ls-files
+  changed+=$'\n'"$(git ls-files --others -- "${globs[@]}" ':(exclude,glob)**/node_modules/**')" || gitfail ls-files
 fi
 changed="$(printf '%s\n' "$changed" | sed '/^$/d' | sort -u)"
 if [ -n "$changed" ]; then
   echo "static: these files configure the checks, they are protected, and this task changed them:"
-  printf '  %s\n' "$changed"
+  printf '%s\n' "$changed" | sed 's/^/  /'
   echo "Put them back as they were; if the check is wrong, say so in your report."
   exit 1
 fi

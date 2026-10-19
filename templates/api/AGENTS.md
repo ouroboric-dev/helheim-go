@@ -35,7 +35,7 @@ This file only adds rules for this leaf. Read `docs/` for the design; this file 
   query or a file path.
 - No secret in the repository, in a test or in a log line.
 - **Do not change the files that configure the checks.** They are `.github/`, `.devcontainer/`,
-  `.pre-commit-config.yaml`, `.golangci.*`, `.markdownlint*`, `.yamllint*`, `.shellcheckrc`, `.gitleaks*`,
+  `.pre-commit-config.yaml`, `.golangci.*`, `.markdownlint*`, `.yamllint*`, `.shellcheckrc`, `shellcheckrc`, `.gitleaks*`,
   `REUSE.toml`, `.reuse/`, `LICENSES/`, `LICENSE` and `*.license`. The factory refuses a task that adds,
   changes, deletes or links one. If a check is wrong, say so in your report; do not edit the file.
 
