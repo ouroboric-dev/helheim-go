@@ -26,25 +26,44 @@ if ! base="$(git merge-base HEAD main 2>/dev/null)"; then
   exit 1
 fi
 list="$(dirname "${BASH_SOURCE[0]}")/protected-common"
-protected=()
+roots=()
+globs=()
 if [ -r "$list" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     line="${line#"${line%%[![:space:]]*}"}"
     line="${line%"${line##*[![:space:]]}"}"
-    case "$line" in '' | '#'*) ;; *) protected+=("$line") ;; esac
+    case "$line" in
+      '' | '#'*) ;;
+      ':(glob)'*) globs+=("$line") ;;
+      *) roots+=("$line") ;;
+    esac
   done <"$list"
 fi
-if [ "${#protected[@]}" -eq 0 ]; then
+if [ "$((${#roots[@]} + ${#globs[@]}))" -eq 0 ]; then
   echo "static: the list of protected files, protected-common, is missing or empty (looked for $list), so they cannot be checked."
   exit 1
 fi
-protected+=(':(glob)**/.golangci.yml' ':(glob)**/.golangci.yaml' ':(glob)**/.golangci.toml' ':(glob)**/.golangci.json'
-  ':(exclude,glob)**/node_modules/**')
+globs+=(':(glob)**/.golangci.yml' ':(glob)**/.golangci.yaml' ':(glob)**/.golangci.toml' ':(glob)**/.golangci.json')
+# Installed packages carry their own config files and no tool reads one from there for the leaf, so the glob
+# entries skip node_modules. The root-anchored entries (.github/, .devcontainer/, ...) do not: whatever is in
+# them is protected.
+globs+=(':(exclude,glob)**/node_modules/**')
 # No --diff-filter (a type change is a change), and no --exclude-standard (an ignored file is listed too).
-changed="$({
-  git diff --no-renames --name-only "$base" -- "${protected[@]}"
-  git ls-files --others -- "${protected[@]}"
-} | sort -u)"
+# Each git command is checked: a failing one fails the rung.
+gitfail() {
+  echo "static: git failed while the protected files were checked ($*), so they cannot be checked."
+  exit 1
+}
+changed=""
+if [ "${#roots[@]}" -gt 0 ]; then
+  changed+="$(git diff --no-renames --name-only "$base" -- "${roots[@]}")" || gitfail diff
+  changed+=$'\n'"$(git ls-files --others -- "${roots[@]}")" || gitfail ls-files
+fi
+if [ "${#globs[@]}" -gt 1 ]; then
+  changed+=$'\n'"$(git diff --no-renames --name-only "$base" -- "${globs[@]}")" || gitfail diff
+  changed+=$'\n'"$(git ls-files --others -- "${globs[@]}")" || gitfail ls-files
+fi
+changed="$(printf '%s\n' "$changed" | sed '/^$/d' | sort -u)"
 if [ -n "$changed" ]; then
   echo "static: these files configure the checks, they are protected, and this task changed them:"
   printf '  %s\n' "$changed"

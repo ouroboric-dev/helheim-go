@@ -945,6 +945,21 @@ func TestStaticRefusesAChangeToAProtectedFile(t *testing.T) {
 			}
 		}
 	}
+	// The node_modules exclusion belongs to the glob entries only: a root-anchored folder is protected whatever it holds.
+	for _, path := range []string{".github/actions/a/node_modules/dep/index.js", ".devcontainer/node_modules/x", ".reuse/node_modules/x", "LICENSES/node_modules/x"} {
+		t.Run(path+" refused", func(t *testing.T) {
+			dir := repo(t, map[string]string{"go.mod": goMod, "a.go": "package t\n"})
+			git(t, dir, "switch", "-q", "-c", "work")
+			put(t, dir, map[string]string{path: "x\n"})
+			git(t, dir, "add", "-f", "--", path)
+			git(t, dir, "commit", "-q", "-m", "work")
+			bin := stubs(t, "golangci-lint")
+			code, out := script(t, dir, bin, "go-static.sh")
+			if code == 0 || !strings.Contains(out, path) || calls(bin) != "" {
+				t.Errorf("exit %d, calls %q\n%s", code, calls(bin), out)
+			}
+		})
+	}
 	// The names a task is allowed to add look like protected ones and are not.
 	for _, path := range []string{"docs/licensing.md", "src/license.ts", "LICENSE.md", "src/vite-env.d.ts", "internal/lint/golangci_test.go", "node_modules/p/x.license", "node_modules/p/.markdownlint.json"} {
 		t.Run(path+" passes", func(t *testing.T) {
@@ -1002,3 +1017,25 @@ func TestStaticFailsClosedWithoutMainOrList(t *testing.T) {
 }
 
 func ptr(s string) *string { return &s }
+
+// A git command that fails must fail the rung: it never goes on as if nothing changed.
+func TestStaticFailsWhenGitFails(t *testing.T) {
+	dir := repo(t, map[string]string{"go.mod": goMod, "a.go": "package t\n"})
+	tree := git(t, dir, "rev-parse", "main^{tree}")
+	git(t, dir, "switch", "-q", "-c", "work")
+	put(t, dir, map[string]string{"b.go": "package t\n"})
+	git(t, dir, "add", "b.go")
+	git(t, dir, "commit", "-q", "-m", "work")
+	obj := filepath.Join(dir, ".git", "objects", tree[:2], tree[2:])
+	if err := os.Chmod(obj, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(obj); err != nil {
+		t.Fatal(err)
+	}
+	bin := stubs(t, "golangci-lint")
+	code, out := script(t, dir, bin, "go-static.sh")
+	if code == 0 || strings.Contains(out, "== gofmt") || !strings.Contains(out, "static:") || calls(bin) != "" {
+		t.Errorf("exit %d, calls %q\n%s", code, calls(bin), out)
+	}
+}
