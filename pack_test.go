@@ -146,3 +146,16 @@ func TestTheTemplatesContractIsNamedSoRoutingFindsIt(t *testing.T) {
 		t.Errorf("go-contract.sh must run oasdiff breaking, the evidence the pointer-contract gate accepts beside extracted edges: %v", err)
 	}
 }
+
+func TestTheRealmHoldsNoGraph(t *testing.T) {
+	if _, err := os.Stat("graph.yaml"); !os.IsNotExist(err) {
+		t.Errorf("graph.yaml: stat = %v; a run takes its graph from the graph pack it names, not from this realm", err)
+	}
+	p, err := schema.LoadPack(".")
+	if err != nil {
+		t.Fatalf("LoadPack() = %v", err)
+	}
+	if p.Graph != "" {
+		t.Errorf("graph = %q; this realm holds no graph", p.Graph)
+	}
+}

@@ -1,8 +1,8 @@
 # The Go flavor of the Helheim realm (change realm-leaf-naming): the recipe of a Go API leaf and the
-# services an API needs. It has no graph: a run takes its graph from its lead realm (midgard-react for the
-# client gallery). The check ladder is rungs 1 to 5 of spec §9.5, with the dependency policy (deps) and the
-# two-tenant authorisation harness (authz) beside the security rung; the
-# reviewers (rung 6) are the lead realm's, and rung 7 is the grader's.
+# services an API needs. It has no graph: a run takes its graph from the graph pack it names (Voluspa's
+# software for the client gallery). The check ladder is rungs 1 to 5 of spec §9.5, with the dependency policy
+# (deps) and the two-tenant authorisation harness (authz) beside the security rung; the
+# reviewers (rung 6) are the graph's, and rung 7 is the grader's.
 name: helheim-go
 version: 0.1.0
 checks:
