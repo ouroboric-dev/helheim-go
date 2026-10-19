@@ -19,8 +19,8 @@ proposal `2026-10-17-realm-leaf-naming`).
 - Holds the recipe of a Go backend leaf (spec §9, as changed by realm leaf naming): the `implementer`
   prompt, the Go devcontainer stack layer with the services an API needs (Postgres, SeaweedFS), the
   api leaf template and its checks, under the role names every build realm shares.
-- Holds no graph in v0. A run takes its graph from its lead realm (`midgard-react` for the client
-  gallery); a backend-only product would add one here later.
+- Holds no graph in v0. A run takes its graph from the graph pack it names (Voluspa's `software`
+  for the client gallery); a backend-only product would add one here later.
 - Its templates are copied into products, so they are MIT-licensed (`templates/`).
 
 ## What is here
@@ -48,15 +48,15 @@ proposal `2026-10-17-realm-leaf-naming`).
   minimum patched versions of `config/deps-policy.json`, then the audits the policy names), `go-security.sh`
   (`govulncheck`, OSV), `go-authz.sh` (the two-tenant harness: every route with a path variable (each is a resource id) has a passing
   `TestCrossTenant<OperationId>`, read by `ygg-authz`, which the image builds from `devcontainer/checks/lib/authz`) and `go-integration.sh`
-  (tests that need Postgres). Rung 6 is the lead realm's reviewers; rung 7 is the grader's.
+  (tests that need Postgres). Rung 6 is the graph's reviewers; rung 7 is the grader's.
 - `templates/api/`: the leaf a new API starts from: a server with a health route, its contract, a
   store with migrations and `sqlc`, and the rules of the leaf in its `AGENTS.md`.
 - `prompts/implementer.md`: what the implementer of a task in this leaf is told.
 
 ## Routing
 
-This realm has no graph, so it adds no gate and ships no index. The lead realm's graph does both
-(`midgard-react`: the `contract-gate` and the `move` with `generated: [REPOS.md, .ygg/impact.json]`). Odin builds
+This realm has no graph, so it adds no gate and ships no index. The graph does both
+(Voluspa's `software` graph: the `contract-gate` and the `move` with `generated: [REPOS.md, .ygg/impact.json]`). Odin builds
 the wiring block of `REPOS.md` and `.ygg/impact.json` from the project, with no model (spec §8). What a Go leaf
 gives it, all read from files, so every edge is `extracted`:
 
