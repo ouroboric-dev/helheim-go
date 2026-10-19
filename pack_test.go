@@ -58,9 +58,9 @@ func TestEveryCheckRunsAScriptThatTheStackImageBakesIn(t *testing.T) {
 	}
 	entries, _ := os.ReadDir(filepath.Join("devcontainer", "checks"))
 	for _, e := range entries {
-		// docs.sh and sqlc-owned.sh are run by the checks, config/ is read by go-static.sh and go-deps.sh, and lib/ holds
+		// docs.sh and sqlc-owned.sh are run by the checks, config/ is read by go-static.sh and go-deps.sh, protected-common is the list go-static.sh reads, and lib/ holds
 		// the helper go-deps.sh runs
-		used := e.Name() == "docs.sh" || e.Name() == "sqlc-owned.sh" || e.Name() == "config" || e.Name() == "lib"
+		used := e.Name() == "docs.sh" || e.Name() == "sqlc-owned.sh" || e.Name() == "config" || e.Name() == "lib" || e.Name() == "protected-common"
 		for _, argv := range p.Checks {
 			used = used || filepath.Base(argv[0]) == e.Name()
 		}

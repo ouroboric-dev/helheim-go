@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -67,6 +68,12 @@ func script(t *testing.T, dir, bin, name string, env ...string) (int, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return runScript(t, abs, dir, bin, env...)
+}
+
+// runScript runs the script at path abs, as script does.
+func runScript(t *testing.T, abs, dir, bin string, env ...string) (int, string) {
+	t.Helper()
 	cmd := exec.Command("bash", abs)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=mod", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
@@ -80,12 +87,12 @@ func script(t *testing.T, dir, bin, name string, env ...string) (int, string) {
 	cmd.Env = append(cmd.Env, env...)
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
-	err = cmd.Run()
+	err := cmd.Run()
 	if ee, ok := err.(*exec.ExitError); ok {
 		return ee.ExitCode(), out.String()
 	}
 	if err != nil {
-		t.Fatalf("%s: %v", name, err)
+		t.Fatalf("%s: %v", abs, err)
 	}
 	return 0, out.String()
 }
@@ -123,30 +130,31 @@ func TestDocsAcceptsDocumentsAndNamesEveryProblemOfTheOthers(t *testing.T) {
 
 func TestStaticStopsAtTheFirstProblemAndSaysWhatToFix(t *testing.T) {
 	bin := stubs(t, "golangci-lint")
+	// rung 1 needs the commit the task started from (main), so each leaf is a repo
 	clean := map[string]string{"go.mod": goMod, "a.go": "package t\n\nfunc A() int { return 1 }\n"}
-	if code, out := script(t, leaf(t, clean), bin, "go-static.sh"); code != 0 || !strings.Contains(calls(bin), "golangci-lint run --config ") || !strings.Contains(calls(bin), " ./...") {
+	if code, out := script(t, repo(t, clean), bin, "go-static.sh"); code != 0 || !strings.Contains(calls(bin), "golangci-lint run --config ") || !strings.Contains(calls(bin), " ./...") {
 		t.Fatalf("a clean leaf: exit %d\n%s\ncalls: %s", code, out, calls(bin))
 	}
 	bin = stubs(t, "golangci-lint")
 	unformatted := map[string]string{"go.mod": goMod, "a.go": "package t\nfunc A() int {return 1}\n"}
-	code, out := script(t, leaf(t, unformatted), bin, "go-static.sh")
+	code, out := script(t, repo(t, unformatted), bin, "go-static.sh")
 	if code == 0 || !strings.Contains(out, "not gofmt-clean") || !strings.Contains(out, "a.go") || calls(bin) != "" {
 		t.Errorf("an unformatted file: exit %d, calls %q\n%s", code, calls(bin), out)
 	}
 	vet := map[string]string{"go.mod": goMod, "a.go": "package t\n\nimport \"fmt\"\n\nfunc A() { fmt.Printf(\"%d\", \"x\") }\n"}
-	if code, out := script(t, leaf(t, vet), stubs(t, "golangci-lint"), "go-static.sh"); code == 0 || !strings.Contains(out, "go vet") {
+	if code, out := script(t, repo(t, vet), stubs(t, "golangci-lint"), "go-static.sh"); code == 0 || !strings.Contains(out, "go vet") {
 		t.Errorf("a vet problem: exit %d\n%s", code, out)
 	}
 	tagged := map[string]string{"go.mod": goMod, "a.go": "package t\n", "a_it_test.go": "//go:build integration\n\npackage t\n\nimport \"fmt\"\n\nfunc init() { fmt.Printf(\"%d\", \"x\") }\n"}
-	if code, _ := script(t, leaf(t, tagged), stubs(t, "golangci-lint"), "go-static.sh"); code == 0 {
+	if code, _ := script(t, repo(t, tagged), stubs(t, "golangci-lint"), "go-static.sh"); code == 0 {
 		t.Error("a vet problem in a file behind the integration tag passed; vet must look there too")
 	}
 	bin = stubs(t, "golangci-lint")
-	if code, _ := script(t, leaf(t, clean), bin, "go-static.sh", "STUB_GOLANGCI_LINT_EXIT=1", "STUB_GOLANGCI_LINT_OUT=a.go:3: unused"); code == 0 {
+	if code, _ := script(t, repo(t, clean), bin, "go-static.sh", "STUB_GOLANGCI_LINT_EXIT=1", "STUB_GOLANGCI_LINT_OUT=a.go:3: unused"); code == 0 {
 		t.Error("a lint failure passed")
 	}
 	docs := map[string]string{"go.mod": goMod, "a.go": "package t\n", "docs/Bad Name.md": "x"}
-	if code, out := script(t, leaf(t, docs), stubs(t, "golangci-lint"), "go-static.sh"); code == 0 || !strings.Contains(out, "docs:") {
+	if code, out := script(t, repo(t, docs), stubs(t, "golangci-lint"), "go-static.sh"); code == 0 || !strings.Contains(out, "docs:") {
 		t.Errorf("a bad document: exit %d\n%s", code, out)
 	}
 }
@@ -324,7 +332,7 @@ func TestTheScriptsFixTheirOwnPathAndIgnoreAnAgentsFolderOnIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
-		if e.IsDir() {
+		if e.IsDir() || e.Name() == "protected-common" { // the list of protected files is data, not a script
 			continue
 		}
 		b, _ := os.ReadFile(filepath.Join("devcontainer", "checks", e.Name()))
@@ -548,36 +556,40 @@ func TestStaticLintsWhatTheLeafTriedToHide(t *testing.T) {
 		t.Helper()
 		return script(t, dir, lint, "go-static.sh")
 	}
-	t.Run("the config replaced by a link to a permissive one", func(t *testing.T) {
-		start := map[string]string{"go.mod": bad["go.mod"], "a.go": bad["a.go"], ".golangci.yml": "version: \"2\"\n"}
-		dir := repo(t, start)
-		git(t, dir, "switch", "-q", "-c", "work")
-		put(t, dir, map[string]string{"permissive.yml": bad["permissive.yml"]})
-		if err := os.Remove(filepath.Join(dir, ".golangci.yml")); err != nil {
-			t.Fatal(err)
-		}
+	// The leaf's own configuration is protected, so a task cannot change it (TestStaticRefusesAChangeToAProtectedFile).
+	// What these cases prove is the other half: a permissive config the leaf already had on main is not read either.
+	t.Run("a config that is a link to a permissive one, on main", func(t *testing.T) {
+		dir := repo(t, map[string]string{"go.mod": bad["go.mod"], "a.go": bad["a.go"], "permissive.yml": bad["permissive.yml"]})
 		if err := os.Symlink("permissive.yml", filepath.Join(dir, ".golangci.yml")); err != nil {
 			t.Fatal(err)
 		}
-		git(t, dir, "add", "-A")
+		git(t, dir, "add", ".golangci.yml")
 		git(t, dir, "commit", "-q", "-m", "link")
-		if code, out := run(t, dir); code == 0 || !strings.Contains(out, "errcheck") {
-			t.Errorf("exit %d\n%s", code, out)
-		}
-	})
-	t.Run("a permissive config hidden by .gitignore", func(t *testing.T) {
-		dir := repo(t, map[string]string{"go.mod": bad["go.mod"], "a.go": bad["a.go"], ".gitignore": ".golangci.json\n"})
 		git(t, dir, "switch", "-q", "-c", "work")
-		put(t, dir, map[string]string{".golangci.json": "{\"version\": \"2\", \"linters\": {\"default\": \"none\", \"enable\": [\"govet\"]}}\n"})
 		if code, out := run(t, dir); code == 0 || !strings.Contains(out, "errcheck") {
 			t.Errorf("exit %d\n%s", code, out)
 		}
 	})
-	t.Run("the config edited", func(t *testing.T) {
+	t.Run("a permissive .golangci.json on main", func(t *testing.T) {
+		dir := repo(t, map[string]string{"go.mod": bad["go.mod"], "a.go": bad["a.go"], ".golangci.json": "{\"version\": \"2\", \"linters\": {\"default\": \"none\", \"enable\": [\"govet\"]}}\n"})
+		git(t, dir, "switch", "-q", "-c", "work")
+		if code, out := run(t, dir); code == 0 || !strings.Contains(out, "errcheck") {
+			t.Errorf("exit %d\n%s", code, out)
+		}
+	})
+	t.Run("a permissive .golangci.yml on main", func(t *testing.T) {
+		dir := repo(t, map[string]string{"go.mod": bad["go.mod"], "a.go": bad["a.go"], ".golangci.yml": bad["permissive.yml"]})
+		git(t, dir, "switch", "-q", "-c", "work")
+		if code, out := run(t, dir); code == 0 || !strings.Contains(out, "errcheck") {
+			t.Errorf("exit %d\n%s", code, out)
+		}
+	})
+	t.Run("the same permissive config in the task's diff is refused", func(t *testing.T) {
 		dir := repo(t, map[string]string{"go.mod": bad["go.mod"], "a.go": bad["a.go"], ".golangci.yml": "version: \"2\"\n"})
 		git(t, dir, "switch", "-q", "-c", "work")
 		put(t, dir, map[string]string{".golangci.yml": bad["permissive.yml"]})
-		if code, out := run(t, dir); code == 0 || !strings.Contains(out, "errcheck") {
+		code, out := run(t, dir)
+		if code == 0 || !strings.Contains(out, "protected") || !strings.Contains(out, ".golangci.yml") || strings.Contains(out, "errcheck") {
 			t.Errorf("exit %d\n%s", code, out)
 		}
 	})
@@ -820,5 +832,210 @@ func TestStaticRefusesAWorkflowChange(t *testing.T) {
 		if code == 0 || !strings.Contains(out, "protected") || !strings.Contains(out, wf) || calls(bin) != "" {
 			t.Errorf("%s: exit %d, calls %q\n%s", c.name, code, calls(bin), out)
 		}
+	}
+}
+
+// goProtected are the names the Go realm adds to the shared list (protected-common).
+var goProtected = []string{":(glob)**/.golangci.yml", ":(glob)**/.golangci.yaml", ":(glob)**/.golangci.toml", ":(glob)**/.golangci.json"}
+
+// commonProtected is what protected-common must name. The test reads the file for the cases, so this list is what
+// stops a line taken out of the file from taking its cases with it.
+var commonProtected = []string{".github/", ".devcontainer/", ".pre-commit-config.yaml", ":(glob)**/.markdownlint*",
+	":(glob)**/.yamllint", ":(glob)**/.yamllint.yaml", ":(glob)**/.yamllint.yml", ":(glob)**/.shellcheckrc",
+	":(glob)**/.gitleaks.toml", ":(glob)**/.gitleaksignore", ":(glob)**/REUSE.toml", ".reuse/", "LICENSES/", "LICENSE",
+	":(glob)**/*.license"}
+
+// protectedSpecs returns the pathspecs of devcontainer/checks/protected-common, comments and blank lines taken out,
+// then the Go realm's own.
+func protectedSpecs(t *testing.T) []string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("devcontainer", "checks", "protected-common"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var specs []string
+	for _, line := range strings.Split(string(b), "\n") {
+		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
+			specs = append(specs, line)
+		}
+	}
+	if !slices.Equal(specs, commonProtected) {
+		t.Errorf("protected-common names %q, want %q", specs, commonProtected)
+	}
+	return append(slices.Clone(commonProtected), goProtected...)
+}
+
+// protectedPaths turns a pathspec into the paths a task could touch: a folder gets a file in it, a glob a
+// file with that name at the top and nested, and a plain name is itself.
+func protectedPaths(spec string) []string {
+	if name, ok := strings.CutPrefix(spec, ":(glob)**/"); ok {
+		name = strings.ReplaceAll(name, "*", "x")
+		return []string{name, "a/b/" + name}
+	}
+	if strings.HasSuffix(spec, "/") {
+		return []string{spec + "x.json"}
+	}
+	return []string{spec}
+}
+
+// Everything the list names is refused whatever the way it got there, before any linter runs: added, changed,
+// deleted, moved away, left untracked, ignored by .gitignore, or swapped for a symlink (a type change).
+func TestStaticRefusesAChangeToAProtectedFile(t *testing.T) {
+	forms := []struct {
+		name   string
+		onMain bool // the file is in the commit the task started from
+		apply  func(t *testing.T, dir, path string)
+	}{
+		{"added", false, func(t *testing.T, dir, path string) {
+			put(t, dir, map[string]string{path: "x\n"})
+			git(t, dir, "add", "--", path)
+			git(t, dir, "commit", "-q", "-m", "work")
+		}},
+		{"changed", true, func(t *testing.T, dir, path string) {
+			put(t, dir, map[string]string{path: "changed\n"})
+			git(t, dir, "add", "--", path)
+			git(t, dir, "commit", "-q", "-m", "work")
+		}},
+		{"deleted", true, func(t *testing.T, dir, path string) {
+			git(t, dir, "rm", "-q", "--", path)
+			git(t, dir, "commit", "-q", "-m", "work")
+		}},
+		{"moved away", true, func(t *testing.T, dir, path string) {
+			git(t, dir, "mv", "--", path, "moved.txt")
+			git(t, dir, "commit", "-q", "-m", "work")
+		}},
+		{"untracked", false, func(t *testing.T, dir, path string) {
+			put(t, dir, map[string]string{path: "x\n"})
+		}},
+		{"ignored", false, func(t *testing.T, dir, path string) {
+			put(t, dir, map[string]string{".gitignore": "/" + path + "\n", path: "x\n"})
+		}},
+		{"swapped for a symlink", true, func(t *testing.T, dir, path string) {
+			if err := os.Remove(filepath.Join(dir, path)); err != nil {
+				t.Fatal(err)
+			}
+			rel, err := filepath.Rel(filepath.Dir(path), "a.go")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(rel, filepath.Join(dir, path)); err != nil {
+				t.Fatal(err)
+			}
+			git(t, dir, "add", "--", path)
+			git(t, dir, "commit", "-q", "-m", "work")
+		}},
+	}
+	for _, spec := range protectedSpecs(t) {
+		for _, path := range protectedPaths(spec) {
+			for _, f := range forms {
+				t.Run(path+" "+f.name, func(t *testing.T) {
+					start := map[string]string{"go.mod": goMod, "a.go": "package t\n"}
+					if f.onMain {
+						start[path] = "start\n"
+					}
+					dir := repo(t, start)
+					git(t, dir, "switch", "-q", "-c", "work")
+					f.apply(t, dir, path)
+					bin := stubs(t, "golangci-lint")
+					code, out := script(t, dir, bin, "go-static.sh")
+					if code == 0 || !strings.Contains(out, "protected") || !strings.Contains(out, path) || calls(bin) != "" {
+						t.Errorf("exit %d, calls %q\n%s", code, calls(bin), out)
+					}
+				})
+			}
+		}
+	}
+	// The node_modules exclusion belongs to the glob entries only: a root-anchored folder is protected whatever it holds.
+	for _, path := range []string{".github/actions/a/node_modules/dep/index.js", ".devcontainer/node_modules/x", ".reuse/node_modules/x", "LICENSES/node_modules/x"} {
+		t.Run(path+" refused", func(t *testing.T) {
+			dir := repo(t, map[string]string{"go.mod": goMod, "a.go": "package t\n"})
+			git(t, dir, "switch", "-q", "-c", "work")
+			put(t, dir, map[string]string{path: "x\n"})
+			git(t, dir, "add", "-f", "--", path)
+			git(t, dir, "commit", "-q", "-m", "work")
+			bin := stubs(t, "golangci-lint")
+			code, out := script(t, dir, bin, "go-static.sh")
+			if code == 0 || !strings.Contains(out, path) || calls(bin) != "" {
+				t.Errorf("exit %d, calls %q\n%s", code, calls(bin), out)
+			}
+		})
+	}
+	// The names a task is allowed to add look like protected ones and are not.
+	for _, path := range []string{"docs/licensing.md", "src/license.ts", "LICENSE.md", "src/vite-env.d.ts", "internal/lint/golangci_test.go", "node_modules/p/x.license", "node_modules/p/.markdownlint.json"} {
+		t.Run(path+" passes", func(t *testing.T) {
+			dir := repo(t, map[string]string{"go.mod": goMod, "a.go": "package t\n", ".gitignore": "node_modules/\n"})
+			git(t, dir, "switch", "-q", "-c", "work")
+			body := "x\n"
+			if strings.HasSuffix(path, ".go") {
+				body = "package lint\n"
+			}
+			put(t, dir, map[string]string{path: body})
+			git(t, dir, "add", "-f", "--", path)
+			git(t, dir, "commit", "-q", "-m", "work")
+			put(t, dir, map[string]string{"node_modules/p/y.license": "x\n", "node_modules/p/LICENSE": "x\n", "node_modules/p/tsconfig.json": "{}\n"})
+			code, out := script(t, dir, stubs(t, "golangci-lint"), "go-static.sh")
+			if strings.Contains(out, "protected, and this task changed them") || !strings.Contains(out, "== gofmt") {
+				t.Errorf("a file a task may add was refused: exit %d\n%s", code, out)
+			}
+		})
+	}
+}
+
+// With no main to compare to, or no list of protected files, the rung fails: it never passes unchecked.
+func TestStaticFailsClosedWithoutMainOrList(t *testing.T) {
+	clean := map[string]string{"go.mod": goMod, "a.go": "package t\n"}
+	t.Run("no main", func(t *testing.T) {
+		dir := leaf(t, clean)
+		git(t, dir, "init", "-q", "-b", "trunk")
+		git(t, dir, "add", "-A")
+		git(t, dir, "commit", "-q", "-m", "start")
+		bin := stubs(t, "golangci-lint")
+		code, out := script(t, dir, bin, "go-static.sh")
+		if code == 0 || !strings.Contains(out, "main") || calls(bin) != "" {
+			t.Errorf("exit %d, calls %q\n%s", code, calls(bin), out)
+		}
+	})
+	src, err := os.ReadFile(filepath.Join("devcontainer", "checks", "go-static.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, list := range map[string]*string{"a missing list": nil, "an empty list": new(string), "a list of comments": ptr("# only a comment\n\n  \n")} {
+		t.Run(name, func(t *testing.T) {
+			checks := t.TempDir()
+			put(t, checks, map[string]string{"go-static.sh": string(src)})
+			if list != nil {
+				put(t, checks, map[string]string{"protected-common": *list})
+			}
+			dir := repo(t, clean)
+			bin := stubs(t, "golangci-lint")
+			code, out := runScript(t, filepath.Join(checks, "go-static.sh"), dir, bin)
+			if code == 0 || !strings.Contains(out, "protected-common") || calls(bin) != "" {
+				t.Errorf("exit %d, calls %q\n%s", code, calls(bin), out)
+			}
+		})
+	}
+}
+
+func ptr(s string) *string { return &s }
+
+// A git command that fails must fail the rung: it never goes on as if nothing changed.
+func TestStaticFailsWhenGitFails(t *testing.T) {
+	dir := repo(t, map[string]string{"go.mod": goMod, "a.go": "package t\n"})
+	tree := git(t, dir, "rev-parse", "main^{tree}")
+	git(t, dir, "switch", "-q", "-c", "work")
+	put(t, dir, map[string]string{"b.go": "package t\n"})
+	git(t, dir, "add", "b.go")
+	git(t, dir, "commit", "-q", "-m", "work")
+	obj := filepath.Join(dir, ".git", "objects", tree[:2], tree[2:])
+	if err := os.Chmod(obj, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(obj); err != nil {
+		t.Fatal(err)
+	}
+	bin := stubs(t, "golangci-lint")
+	code, out := script(t, dir, bin, "go-static.sh")
+	if code == 0 || strings.Contains(out, "== gofmt") || !strings.Contains(out, "static:") || calls(bin) != "" {
+		t.Errorf("exit %d, calls %q\n%s", code, calls(bin), out)
 	}
 }
