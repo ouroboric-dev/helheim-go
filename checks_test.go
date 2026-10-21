@@ -845,8 +845,9 @@ const gitFailed = "git failed while the protected files were checked"
 // goProtected are the names the Go realm adds to the shared list (protected-common).
 var goProtected = []string{":(glob)**/.golangci.yml", ":(glob)**/.golangci.yaml", ":(glob)**/.golangci.toml", ":(glob)**/.golangci.json"}
 
-// commonProtected is what protected-common must name. The test reads the file for the cases, so this list is what
-// stops a line taken out of the file from taking its cases with it.
+// commonProtected is what protected-common must name. The refusal test takes its cases from this list, and
+// protectedSpecs compares the file with it, so a line taken out of the file fails that comparison instead of
+// taking its cases with it.
 var commonProtected = []string{".github/", ".devcontainer/", ".pre-commit-config.yaml", ":(glob)**/.markdownlint*",
 	":(glob)**/.yamllint", ":(glob)**/.yamllint.yaml", ":(glob)**/.yamllint.yml", ":(glob)**/.shellcheckrc",
 	":(glob)**/shellcheckrc", ":(glob)**/.gitleaks.toml", ":(glob)**/.gitleaksignore", ":(glob)**/REUSE.toml", ".reuse/", "LICENSES/", "LICENSE",
@@ -1138,4 +1139,69 @@ func TestStaticFailsWhenGitFails(t *testing.T) {
 	if code == 0 || strings.Contains(out, "== gofmt") || !strings.Contains(out, gitFailed) || calls(bin) != "" {
 		t.Errorf("exit %d, calls %q\n%s", code, calls(bin), out)
 	}
+}
+
+// git reads these variables from its environment and they change what a pathspec means (GIT_LITERAL_PATHSPECS
+// turns :(glob)**/.yamllint into a literal name). A task must not be able to switch the match-anywhere names off.
+func TestStaticRefusesAProtectedChangeWhateverThePathspecEnvironmentSays(t *testing.T) {
+	for _, env := range []string{"GIT_LITERAL_PATHSPECS=1", "GIT_GLOB_PATHSPECS=1", "GIT_NOGLOB_PATHSPECS=1", "GIT_ICASE_PATHSPECS=1"} {
+		for _, path := range []string{".yamllint", "a/b/.yamllint", ".golangci.yml", "a/b/x.license"} {
+			t.Run(env+" "+path, func(t *testing.T) {
+				dir := repo(t, map[string]string{"go.mod": goMod, "a.go": "package t\n"})
+				git(t, dir, "switch", "-q", "-c", "work")
+				put(t, dir, map[string]string{path: "x\n"})
+				git(t, dir, "add", "--", path)
+				git(t, dir, "commit", "-q", "-m", "work")
+				bin := stubs(t, "golangci-lint")
+				code, out := script(t, dir, bin, "go-static.sh", env)
+				if code == 0 || !strings.Contains(out, refusal) || !strings.Contains(out, "\n  "+path+"\n") || calls(bin) != "" {
+					t.Errorf("exit %d, calls %q\n%s", code, calls(bin), out)
+				}
+			})
+		}
+	}
+}
+
+// git resolves a tag before a branch, so a plain "main" in a rung finds the base through a tag the task made.
+// With a tag called main at the task's HEAD and the branch main unmoved, each rung must still see the change.
+func TestRungsFindTheBaseOnTheBranchMainWhateverTagsExist(t *testing.T) {
+	tagged := func(t *testing.T, start, change map[string]string) string {
+		t.Helper()
+		dir := repo(t, start)
+		work(t, dir, change)
+		git(t, dir, "tag", "main", "HEAD")
+		return dir
+	}
+	t.Run("tdd", func(t *testing.T) {
+		dir := tagged(t, map[string]string{"go.mod": goMod, "a.go": aGo, "a_test.go": aTestGo},
+			map[string]string{"b.go": "package t\n\nfunc B() int { return 2 }\n"})
+		code, out := script(t, dir, "", "go-tdd.sh")
+		if code == 0 || !strings.Contains(out, "changed without a new or changed test") {
+			t.Errorf("code with no test passed under a tag called main: exit %d\n%s", code, out)
+		}
+	})
+	t.Run("contract", func(t *testing.T) {
+		dir := tagged(t, map[string]string{"sqlc.yaml": "x"}, map[string]string{"openapi.yaml": "openapi: 3.1.0\n"})
+		bin := stubs(t, "vacuum", "sqlc", "oasdiff")
+		code, out := script(t, dir, bin, "go-contract.sh")
+		if code != 0 || !strings.Contains(out, "is new in this change") || strings.Contains(calls(bin), "oasdiff") {
+			t.Errorf("a new contract under a tag called main: exit %d, calls %q\n%s", code, calls(bin), out)
+		}
+	})
+	t.Run("sqlc-owned", func(t *testing.T) {
+		full := sqlcLeaf(t)
+		start, change := map[string]string{}, map[string]string{}
+		for name, body := range full {
+			if name == "sqlc.yaml" || strings.HasPrefix(name, "internal/store/") && !strings.HasPrefix(name, "internal/store/migrations/") {
+				change[name] = body
+			} else {
+				start[name] = body
+			}
+		}
+		// sqlc.yaml and its output arrive in the task: the base has no sqlc.yaml, so nothing is owned.
+		dir := tagged(t, start, change)
+		if code, out := script(t, dir, "", "sqlc-owned.sh"); code != 0 || strings.TrimSpace(out) != "" {
+			t.Errorf("files listed as sqlc's own under a tag called main: exit %d\n%s", code, out)
+		}
+	})
 }

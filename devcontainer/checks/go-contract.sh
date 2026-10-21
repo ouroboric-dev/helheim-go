@@ -9,7 +9,7 @@ export PATH="${YGG_CHECKS_PATH:-/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin}"
 [ -f openapi.yaml ] || { echo "contract: this leaf has no openapi.yaml, and it owns the contract of its API"; exit 1; }
 echo "== openapi lint"
 vacuum lint --no-style --details --fail-severity error openapi.yaml
-base="$(git merge-base HEAD main)" || { echo "contract: this leaf has no main to compare with"; exit 1; }
+base="$(git merge-base HEAD refs/heads/main)" || { echo "contract: this leaf has no main to compare with"; exit 1; }
 # sqlc diff reads the sqlc.yaml of the commit the task started from, in a copy of the working tree: a
 # sqlc.yaml the agent changed, linked or hid cannot matter.
 if git cat-file -e "$base:sqlc.yaml" 2>/dev/null; then

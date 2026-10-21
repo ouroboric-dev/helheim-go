@@ -19,7 +19,7 @@ export PATH="${YGG_CHECKS_PATH:-/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin}"
   go mod verify 2>&1 || go mod download 2>&1 || true
   exit 1
 }
-base="$(git merge-base HEAD main)" || { echo "tdd: this leaf has no main to compare with"; exit 1; }
+base="$(git merge-base HEAD refs/heads/main)" || { echo "tdd: this leaf has no main to compare with"; exit 1; }
 # sqlc.yaml is read as it was at the base: the agent must not widen the exemption by editing it.
 sqlc_value() { { git show "$base:sqlc.yaml" 2>/dev/null || true; } | sed -n "s/^ *$1: *[\"']\{0,1\}\([^\"' #]*\).*/\1/p" | sed 's|/*$||'; }
 queries_dir="$(sqlc_value queries | head -n 1)" schema_dir="$(sqlc_value schema | head -n 1)"
