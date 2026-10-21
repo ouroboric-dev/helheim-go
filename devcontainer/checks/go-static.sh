@@ -21,6 +21,9 @@ echo "== protected paths"
 # (sqlc-owned.sh), so a config swapped, hidden or edited in the leaf changes nothing. With no main to compare
 # to (a branch called main: a tag or any other ref of that name does not count), or no list, the rung fails: it
 # never passes unchecked.
+# git reads the variables below from the environment and they change what a pathspec means (a literal one
+# turns :(glob)**/.yamllint into a name no file has), so the protected step does not trust them.
+unset GIT_LITERAL_PATHSPECS GIT_GLOB_PATHSPECS GIT_NOGLOB_PATHSPECS GIT_ICASE_PATHSPECS
 if ! base="$(git merge-base HEAD refs/heads/main 2>/dev/null)"; then
   echo "static: there is no main branch to compare this task with, so the protected files cannot be checked."
   echo "Make the commit the task started from a branch called main."
@@ -62,10 +65,9 @@ if [ "${#roots[@]}" -gt 0 ]; then
   changed+="$(git diff --no-renames --name-only "$base" -- "${roots[@]%/}")" || gitfail diff
   changed+=$'\n'"$(git ls-files --others -- "${roots[@]%/}")" || gitfail ls-files
 fi
-if [ "${#globs[@]}" -gt 0 ]; then
-  changed+=$'\n'"$(git diff --no-renames --name-only "$base" -- "${globs[@]}")" || gitfail diff
-  changed+=$'\n'"$(git ls-files --others -- "${globs[@]}" ':(exclude,glob)**/node_modules/**')" || gitfail ls-files
-fi
+# globs always has the Go names, so it is never empty.
+changed+=$'\n'"$(git diff --no-renames --name-only "$base" -- "${globs[@]}")" || gitfail diff
+changed+=$'\n'"$(git ls-files --others -- "${globs[@]}" ':(exclude,glob)**/node_modules/**')" || gitfail ls-files
 changed="$(printf '%s\n' "$changed" | sed '/^$/d' | sort -u)"
 if [ -n "$changed" ]; then
   echo "static: these files configure the checks, they are protected, and this task changed them:"

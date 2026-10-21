@@ -8,7 +8,7 @@
 set -euo pipefail
 # The tools are found in the image's root-owned folders only, never in one the agent can write (/go/bin).
 export PATH="${YGG_CHECKS_PATH:-/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin}"
-base="$(git merge-base HEAD main 2>/dev/null)" || exit 0
+base="$(git merge-base HEAD refs/heads/main 2>/dev/null)" || exit 0
 scratch="$(mktemp -d)"
 trap 'rm -rf -- "$scratch"' EXIT
 git show "$base:sqlc.yaml" >"$scratch/base.yaml" 2>/dev/null || exit 0

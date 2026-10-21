@@ -58,8 +58,9 @@ runs them in a sandbox that starts one. Write them when the task is about data.
 - Do not run `git commit`, `git checkout`, `git reset` or any other command that changes history or
   branches. The factory commits your work after you stop.
 - Do not change a file that configures the checks: `.devcontainer/`, `.github/`, `.pre-commit-config.yaml`,
-  the lint, licence and base-CI files (`.golangci.*`, `.markdownlint*`, `.yamllint*`, `.shellcheckrc`, `shellcheckrc`,
-  `.gitleaks*`, `REUSE.toml`, `.reuse/`, `LICENSES/`, `LICENSE`, `*.license`), or any script or tool that
+  the lint, licence and base-CI files (`.golangci.yml`, `.golangci.yaml`, `.golangci.toml`, `.golangci.json`, `.markdownlint*`,
+  `.yamllint`, `.yamllint.yaml`, `.yamllint.yml`, `.shellcheckrc`, `shellcheckrc`,
+  `.gitleaks.toml`, `.gitleaksignore`, `REUSE.toml`, `.reuse/`, `LICENSES/`, `LICENSE`, `*.license`), or any script or tool that
   checks your work. The first check refuses the change and names the file. If a check seems wrong, say so in
   your summary and leave it as it is.
 - Do not read or change files outside this repository.
