@@ -47,3 +47,5 @@ This file only adds rules for this leaf. Read `docs/` for the design; this file 
 - `db/queries`: the SQL that sqlc turns into Go.
 - Tests that need a database carry `//go:build integration` and read `YGG_DATABASE_URL`.
 - `openapi.yaml`: the contract.
+- `run.sh`: starts the leaf on `PORT`: builds `cmd/api` into a temporary folder and runs it. It fetches no
+  packages. Keep it working: a test starts it.

@@ -32,6 +32,12 @@ and the test that proves it.
   404. The factory fails the change without it.
 - **Secrets.** Write none into code, tests, logs or docs. A test uses made-up values.
 
+## Keep `run.sh` working
+
+`run.sh` at the root of the leaf starts the server on `PORT`: it builds the program into a temporary folder
+and runs it. It fetches nothing. If a task changes how the program starts or what it builds from, keep
+`run.sh` working; the factory starts it in a test.
+
 ## Check your work before you stop
 
 Run these in the repository and fix what they say:

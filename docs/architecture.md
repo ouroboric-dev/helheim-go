@@ -50,7 +50,11 @@ proposal `2026-10-17-realm-leaf-naming`).
   `TestCrossTenant<OperationId>`, read by `ygg-authz`, which the image builds from `devcontainer/checks/lib/authz`) and `go-integration.sh`
   (tests that need Postgres). Rung 6 is the graph's reviewers; rung 7 is the grader's.
 - `templates/api/`: the leaf a new API starts from: a server with a health route, its contract, a
-  store with migrations and `sqlc`, and the rules of the leaf in its `AGENTS.md`.
+  store with migrations and `sqlc`, the rules of the leaf in its `AGENTS.md`, and `run.sh`, the leaf run
+  contract (spec §9.4): in the leaf, with `PORT` set, it builds the server into a temporary folder with no
+  package fetching (`GOPROXY=off`, so the modules must be in the module cache), runs it in the foreground on
+  `PORT`, and exits non-zero with a message when `PORT` is unset or the build fails. It is not a protected
+  file: a task may change it, and `TestRunScriptStarts` guards it.
 - `prompts/implementer.md`: what the implementer of a task in this leaf is told.
 
 ## Routing
@@ -75,7 +79,8 @@ reaches goes to a person.
 
 `go test ./...` runs the scripts on small leaves made in a temp dir, with the real `go` and `git` and
 stand-ins for the image's tools; it builds and tests the template, which needs the Go module proxy the
-first time (set `YGG_REQUIRE_TEMPLATES` to fail instead of skipping when it cannot be reached). The
+first time (set `YGG_REQUIRE_TEMPLATES` to fail instead of skipping when it cannot be reached). It also starts the
+template's `run.sh` from a copy with a free `PORT` and waits for the port (`TestRunScriptStarts`, RR-23). The
 image itself and the tools in it are checked on a real engine (Phase 5b, v0-H14).
 
 ## CI

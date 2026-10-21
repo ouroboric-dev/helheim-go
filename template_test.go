@@ -1,12 +1,20 @@
 package helheim
 
 import (
+	"bytes"
 	"encoding/json"
+	"io/fs"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // copyTemplate copies templates/<name> into a temp dir, where it is a module of its own, as it is in a
@@ -90,5 +98,125 @@ func TestATemplateCarriesWhatARepoOfTheFactoryNeeds(t *testing.T) {
 		if _, bad := dc[key]; bad {
 			t.Errorf(".devcontainer/devcontainer.json sets %s, which runs or widens something when a person opens the repo", key)
 		}
+	}
+}
+
+// freePort asks the kernel for a port nobody holds, and gives it back at once.
+func freePort(t *testing.T) string {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = l.Close() }()
+	return strconv.Itoa(l.Addr().(*net.TCPAddr).Port)
+}
+
+// startRunSh starts the template copy's run.sh in a process group of its own, with env added to a
+// clean environment (no PORT unless env sets it). TMPDIR is a folder of the test, so the script's
+// temporary folder goes away with it.
+func startRunSh(t *testing.T, dir string, env ...string) (*exec.Cmd, *bytes.Buffer) {
+	t.Helper()
+	var out bytes.Buffer
+	cmd := exec.Command("./run.sh")
+	cmd.Dir = dir
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME"), "TMPDIR=" + t.TempDir(), "GOWORK=off"}
+	for _, kv := range []string{"GOMODCACHE", "GOCACHE", "GOPATH", "GOFLAGS"} {
+		if v := os.Getenv(kv); v != "" {
+			cmd.Env = append(cmd.Env, kv+"="+v)
+		}
+	}
+	cmd.Env = append(cmd.Env, env...)
+	cmd.Stdout, cmd.Stderr = &out, &out
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("run.sh does not start: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		_ = cmd.Wait()
+	})
+	return cmd, &out
+}
+
+// leafFiles lists the files under dir, to see that a run leaves the leaf as it was.
+func leafFiles(t *testing.T, dir string) []string {
+	t.Helper()
+	var names []string
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			names = append(names, p)
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return names
+}
+
+// RR-23: the template ships a run.sh that builds the leaf and starts it on PORT.
+func TestRunScriptStarts(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		if os.Getenv("YGG_REQUIRE_TEMPLATES") != "" {
+			t.Fatalf("no go toolchain: %v", err)
+		}
+		t.Skip("no go toolchain (set YGG_REQUIRE_TEMPLATES to fail instead)")
+	}
+	dir := copyTemplate(t, "api")
+	needModules(t, dir)
+	if fi, err := os.Stat(filepath.Join(dir, "run.sh")); err != nil || fi.Mode()&0o111 == 0 {
+		t.Fatalf("the template needs an executable run.sh: %v", err)
+	}
+	before := leafFiles(t, dir)
+	port := freePort(t)
+	cmd, out := startRunSh(t, dir, "PORT="+port)
+	exited := make(chan error, 1)
+	go func() { exited <- cmd.Wait() }()
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		if c, err := net.DialTimeout("tcp", "127.0.0.1:"+port, time.Second); err == nil {
+			_ = c.Close()
+			break
+		}
+		select {
+		case err := <-exited:
+			t.Fatalf("run.sh stopped before the port answered: %v\n%s", err, out)
+		case <-time.After(200 * time.Millisecond):
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("port %s did not answer within 60 s\n%s", port, out)
+		}
+	}
+	resp, err := http.Get("http://127.0.0.1:" + port + "/")
+	if err == nil {
+		_ = resp.Body.Close()
+	}
+	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+	select {
+	case <-exited:
+	case <-time.After(15 * time.Second):
+		t.Errorf("run.sh did not stop on SIGTERM")
+	}
+	if after := leafFiles(t, dir); !slices.Equal(before, after) {
+		t.Errorf("run.sh changed the files of the leaf:\nbefore %v\nafter  %v", before, after)
+	}
+}
+
+func TestRunScriptFailsWithoutPort(t *testing.T) {
+	dir := copyTemplate(t, "api")
+	cmd, out := startRunSh(t, dir)
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatalf("run.sh exited 0 with PORT unset\n%s", out)
+		}
+		if !strings.Contains(out.String(), "PORT") {
+			t.Errorf("the message does not name PORT:\n%s", out)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatalf("run.sh did not stop with PORT unset\n%s", out)
 	}
 }
