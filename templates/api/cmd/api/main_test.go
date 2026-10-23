@@ -18,3 +18,14 @@ func TestPortComesFromTheEnvironmentOr8080(t *testing.T) {
 		}
 	}
 }
+
+func TestListensOnHost(t *testing.T) {
+	t.Setenv("HOST", "127.0.0.1")
+	if got := listenAddr(8080); got != "127.0.0.1:8080" {
+		t.Errorf("listenAddr(8080) with HOST=127.0.0.1 = %q; want 127.0.0.1:8080", got)
+	}
+	t.Setenv("HOST", "")
+	if got := listenAddr(8080); got != ":8080" {
+		t.Errorf("listenAddr(8080) with no HOST = %q; want :8080 (all interfaces)", got)
+	}
+}

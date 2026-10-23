@@ -32,9 +32,25 @@ and the test that proves it.
   404. The factory fails the change without it.
 - **Secrets.** Write none into code, tests, logs or docs. A test uses made-up values.
 
+## The runtime
+
+The product runs from `/app/start.sh`, which is the factory's: do not change it or anything at the project root.
+
+- The API reads only these names: `PORT`, `HOST` (it listens on `HOST:PORT`, on all interfaces when `HOST` is
+  unset), `DATABASE_URL`, `DATA_DIR`, `S3_ENDPOINT`, `S3_REGION` (`us-east-1`), `S3_BUCKET` (`ygg-store`),
+  `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`. It needs no other variable to start. Write no secret into code,
+  tests or logs.
+- Write files only under `DATA_DIR`.
+- Build every public address (a presigned URL, a client link) from the `X-Forwarded-Host` and
+  `X-Forwarded-Proto` headers the web leaf sets on `/api/...` requests, never from `S3_ENDPOINT`'s host.
+  Storage URLs are path-style, `/<S3_BUCKET>/<key>`, signed for that address.
+- At start, make the bucket when it is missing, with versioning on when the store supports it.
+- Photo bytes and zips of photos never pass through the API: hand out presigned URLs; never stream a photo or a
+  zip. A reviewer reports that as a violation.
+
 ## Keep `run.sh` working
 
-`run.sh` at the root of the leaf starts the server on `PORT`: it builds the program into a temporary folder
+`run.sh` at the root of the leaf starts the server on `PORT` and `HOST`: it builds the program into a temporary folder
 and runs it. It fetches nothing. If a task changes how the program starts or what it builds from, keep
 `run.sh` working; the factory starts it in a test.
 

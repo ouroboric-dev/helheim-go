@@ -12,8 +12,22 @@ This file only adds rules for this leaf. Read `docs/` for the design; this file 
 - `go.mod` says `module api`. Imports are `api/internal/...`.
 - Standard library first: `net/http` with the Go 1.22 pattern mux. A new dependency needs a reason in
   the commit message that the standard library cannot give. A dependency is a tagged release: no pseudo-version, no `replace`.
-- The server listens on `PORT` and uses the database at `DATABASE_URL` when that is set. It reads nothing
-  else from the environment that is not named in `docs/`.
+- The server listens on `HOST:PORT` (all interfaces when `HOST` is unset) and uses the database at
+  `DATABASE_URL` when that is set.
+- **The runtime names.** The API reads only these: `PORT`, `HOST`, `DATABASE_URL`, `DATA_DIR`,
+  `S3_ENDPOINT`, `S3_REGION` (`us-east-1`), `S3_BUCKET` (`ygg-store`), `S3_ACCESS_KEY_ID` and
+  `S3_SECRET_ACCESS_KEY`. It needs no other variable to start, and reads nothing else from the
+  environment that `docs/` does not name. It writes files only under `DATA_DIR`.
+- **Public addresses.** The web leaf forwards `/api/...` to the API with `X-Forwarded-Host` and
+  `X-Forwarded-Proto`. The API builds every public address (a presigned URL, a client link) from them,
+  as `<X-Forwarded-Proto>://<X-Forwarded-Host>`, never from `S3_ENDPOINT`'s host. Storage URLs are
+  path-style, `/<S3_BUCKET>/<key>`, signed for that address.
+- **The bucket.** At start the API makes the bucket `S3_BUCKET` when it is missing, with versioning on
+  when the store supports it.
+- **The photo rule.** Photo bytes and zips of photos never pass through the API: it hands the browser
+  presigned URLs and never streams a photo or a zip. A reviewer reports it as a violation.
+- `/app/start.sh` is the product's start and belongs to the factory. No task changes it or the project
+  root.
 
 ## Rules for every change
 
@@ -48,5 +62,5 @@ This file only adds rules for this leaf. Read `docs/` for the design; this file 
 - `db/queries`: the SQL that sqlc turns into Go.
 - Tests that need a database carry `//go:build integration` and read `YGG_DATABASE_URL`.
 - `openapi.yaml`: the contract.
-- `run.sh`: starts the leaf on `PORT`: builds `cmd/api` into a temporary folder and runs it. It fetches no
+- `run.sh`: starts the leaf on `PORT` (and `HOST`): builds `cmd/api` into a temporary folder and runs it. It fetches no
   packages. Keep it working: a test starts it.

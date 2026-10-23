@@ -55,6 +55,10 @@ proposal `2026-10-17-realm-leaf-naming`).
   package fetching (`GOPROXY=off`, so the modules must be in the module cache), runs it in the foreground on
   `PORT`, and exits non-zero with a message when `PORT` is unset or the build fails. It is not a protected
   file: a task may change it, and `TestRunScriptStarts` guards it.
+- The template's server listens on `HOST:PORT` (all interfaces when `HOST` is unset). Its `AGENTS.md` and
+  `prompts/implementer.md` name the runtime of spec §9.4 (`PORT`, `HOST`, `DATABASE_URL`, `DATA_DIR`, the `S3_*`
+  names, the bucket `ygg-store`), the public address from `X-Forwarded-Host` and `X-Forwarded-Proto`, and the rule
+  that photo bytes and zips of photos never pass through the API; `TestPromptNamesTheRuntime` guards both.
 - `prompts/implementer.md`: what the implementer of a task in this leaf is told.
 
 ## Routing
