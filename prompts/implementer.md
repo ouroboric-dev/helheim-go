@@ -48,7 +48,7 @@ The product runs from `/app/start.sh`, which is the factory's: do not change it 
   `S3_ENDPOINT`. The presign client is built per request with its endpoint set to
   `<X-Forwarded-Proto>://<X-Forwarded-Host>`, never `S3_ENDPOINT`, with path-style on (AWS SDK v2
   `UsePathStyle: true`; minio-go `BucketLookupPath`) and region `S3_REGION`, so the URL is
-  `<public base>/<S3_BUCKET>/<key>`. Presigning makes no network call. Never use virtual-host style.
+  `<public base>/<S3_BUCKET>/<key>`. Presigning makes no network call (minio-go: set `Options.Region`, or it asks the store for the bucket's location). Never use virtual-host style.
 - When `X-Forwarded-Host` is absent (a direct call in the sandbox), build the address from the request's
   `Host`, with `https` only when `r.TLS` is set.
 - At start, make the bucket when it is missing, with versioning on when the store supports it.

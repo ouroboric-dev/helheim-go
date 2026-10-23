@@ -17,9 +17,8 @@ proposal `2026-10-17-realm-leaf-naming`).
 ## Responsibilities
 
 - Holds the recipe of a Go backend leaf (spec §9, as changed by realm leaf naming): the `implementer`
-  prompt, the Go devcontainer stack layer with the needs of an API (a Postgres database and an S3 store,
-  which the runtime realm provides), the
-  api leaf template and its checks, under the role names every build realm shares.
+  prompt, the Go devcontainer stack layer, and the needs of an API (a Postgres database and an S3
+  store, which the runtime realm provides), the api leaf template and its checks, under the role names every build realm shares.
 - Holds no graph in v0. A run takes its graph from the graph pack it names (Voluspa's `software`
   for the client gallery); a backend-only product would get its own graph in Voluspa, not here.
 - Its templates are copied into products, so they are MIT-licensed (`templates/`).
@@ -37,6 +36,8 @@ proposal `2026-10-17-realm-leaf-naming`).
   on 1.26.9 govulncheck exits 3. The founder approved the image, pushed 2026-10-21, on 2026-10-23 as a security
   exception to RR-13's rule that images are at least two weeks old. Every golang image in the repo carries the
   same digest.
+- `templates/api/release.sh`: builds a static binary and `OUT/run.sh`, which starts it with no Go. It is used at
+  export.
 - `devcontainer/checks/protected-common`: the files that configure the checks of every product, one git
   pathspec a line: the CI and dev container, `.pre-commit-config.yaml`, the markdown, YAML, shell and
   secret-scan configs, and the licensing files. Rung 1 adds the Go lint configs (`.golangci.*`) and refuses
@@ -79,8 +80,8 @@ gives it, all read from files, so every edge is `extracted`:
 - Go imports of another leaf's module.
 - Every file whose name ends in `openapi.yaml`: the leaf holds that contract. The template's contract is
   `openapi.yaml`. Name any other contract the same way, or routing does not see it.
-- The services themselves: this pack declares the needs `postgres` and `s3`, and the runtime realm
-  names and runs them.
+- The services themselves: this pack declares the needs `postgres` and `s3`. Routing draws an edge to each of
+  `postgres` and `s3`, the runtime realm's providers of those needs, as odin's `services.For` names them.
 
 The `pointer-contract` gate judges a move that changes a contract by these edges or by `oasdiff`. `go-contract.sh`
 already runs `oasdiff breaking` in the leaf, and the image holds `oasdiff`. A contract change that only a guess
