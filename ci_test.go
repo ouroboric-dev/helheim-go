@@ -6,8 +6,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-
-	"github.com/ouroboric-dev/gungnir/schema"
 )
 
 // first returns the first match of the pattern in text, or fails the test.
@@ -61,23 +59,10 @@ func TestTemplateCI(t *testing.T) {
 		t.Errorf("container image = %s, want the stack's %s", got, stack)
 	}
 
-	// Postgres is the pack's service, with its env, and the job waits for it
-	p, err := schema.LoadPack(".")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var pg string
-	for _, s := range p.ServiceList() {
-		if s.Name == "postgres" {
-			pg = s.Image
-		}
-	}
-	if pg == "" {
-		t.Fatal("pack.yaml has no postgres service")
-	}
+	// Postgres 18, the image of the runtime realm (T27 checks it against niflheim-local), with its env, and the job waits for it
 	svc := first(t, wf, `(?m)^    services:\n((?:      .*\n)+)`, "the services")[1]
-	if got := first(t, svc, `(?m)^      postgres:\n        image: (?:>-\n          )?(\S+)\s*$`, "the postgres service")[1]; got != pg {
-		t.Errorf("postgres image = %s, want pack.yaml's %s", got, pg)
+	if got := first(t, svc, `(?m)^      postgres:\n        image: (?:>-\n          )?(\S+)\s*$`, "the postgres service")[1]; !regexp.MustCompile(`^docker\.io/library/postgres:18\.\d+-\S+@sha256:[0-9a-f]{64}$`).MatchString(got) {
+		t.Errorf("postgres image = %s, want a Postgres 18 image by digest", got)
 	}
 	for _, want := range []string{"POSTGRES_DB: app", "POSTGRES_HOST_AUTH_METHOD: trust", "pg_isready"} {
 		if !strings.Contains(svc, want) {

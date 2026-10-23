@@ -1,6 +1,7 @@
 package helheim
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -70,28 +71,81 @@ func TestEveryCheckRunsAScriptThatTheStackImageBakesIn(t *testing.T) {
 	}
 }
 
-func TestTheServicesAreWhatAnAPIAsksForAndPinnedByDigest(t *testing.T) {
+// The services an API runs on are the runtime realm's (Niflheim's), asked for by need; the pack names none.
+func TestThePackNeedsADatabaseAndAStore(t *testing.T) {
 	p, err := schema.LoadPack(".")
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := map[string]gungnir.Service{}
-	for _, s := range p.ServiceList() {
-		svc[s.Name] = s
+	if got := strings.Join(p.Needs, ","); got != "postgres,s3" {
+		t.Errorf("needs = %q, want postgres,s3", got)
 	}
-	pg, s3 := svc["postgres"], svc["seaweedfs"]
-	if len(svc) != 2 || pg.Ports[0] != 5432 || s3.Ports[0] != 8333 {
-		t.Fatalf("services = %+v; an API gets Postgres on 5432 and SeaweedFS's S3 on 8333", svc)
+	for _, n := range p.Needs {
+		if !gungnir.ValidNeed(n) {
+			t.Errorf("need %q is not one of gungnir.Needs", n)
+		}
 	}
-	if pg.Env["POSTGRES_DB"] != "app" || pg.Env["POSTGRES_HOST_AUTH_METHOD"] != "trust" {
-		t.Errorf("postgres env = %v; go-integration.sh connects to database app as postgres, with no password", pg.Env)
+	if len(p.Services) != 0 {
+		t.Errorf("services = %+v; the runtime realm provides them (RR-27)", p.Services)
 	}
-	if len(s3.Command) == 0 || s3.Command[0] != "server" {
-		t.Errorf("seaweedfs command = %v; the image does nothing without one", s3.Command)
+}
+
+// walk calls fn with the path and text of every file in the realm except .git, LICENSES and go.sum.
+func walk(t *testing.T, fn func(path, text string)) {
+	t.Helper()
+	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == ".git" || d.Name() == "LICENSES" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Name() == "go.sum" || !d.Type().IsRegular() {
+			return nil
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		fn(path, string(b))
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := gungnir.ValidateServices(p.ServiceList()); err != nil {
-		t.Error(err)
+}
+
+func TestNoPostgres17(t *testing.T) {
+	re := regexp.MustCompile(`postgres:17|postgresql-17|postgresql/17|Postgres 17`)
+	walk(t, func(path, text string) {
+		if path == "pack_test.go" {
+			return
+		}
+		if m := re.FindString(text); m != "" {
+			t.Errorf("%s names %q; the runtime realm runs Postgres 18", path, m)
+		}
+	})
+}
+
+func TestTheStoreIsTheS3Service(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("devcontainer", "checks", "go-integration.sh"))
+	if err != nil {
+		t.Fatal(err)
 	}
+	if !strings.Contains(string(b), `YGG_S3_ENDPOINT="${YGG_S3_ENDPOINT:-http://s3:8333}"`) {
+		t.Error("go-integration.sh's default YGG_S3_ENDPOINT is not http://s3:8333")
+	}
+	walk(t, func(path, text string) {
+		if strings.HasSuffix(path, "_test.go") {
+			return
+		}
+		if strings.Contains(text, "seaweedfs:8333") || strings.Contains(text, "http://seaweedfs") {
+			t.Errorf("%s names the store by seaweedfs; the runtime realm's service is s3", path)
+		}
+	})
 }
 
 func TestTheImplementerPromptTellsWhatTheFactoryChecksAndWhatNotToDo(t *testing.T) {

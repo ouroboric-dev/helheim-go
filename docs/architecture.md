@@ -8,7 +8,7 @@ style: reference
 
 # helheim-go architecture
 
-The Helheim realm's Go flavor: prompts, devcontainer stack layer and services, templates and checks
+The Helheim realm's Go flavor: prompts, devcontainer stack layer, templates and checks
 for backends.
 
 Helheim is the realm of backends, and this is its Go flavor (realm leaf naming, Yggdrasil change
@@ -17,20 +17,27 @@ proposal `2026-10-17-realm-leaf-naming`).
 ## Responsibilities
 
 - Holds the recipe of a Go backend leaf (spec §9, as changed by realm leaf naming): the `implementer`
-  prompt, the Go devcontainer stack layer with the services an API needs (Postgres, SeaweedFS), the
-  api leaf template and its checks, under the role names every build realm shares.
+  prompt, the Go devcontainer stack layer, and the needs of an API (a Postgres database and an S3
+  store, which the runtime realm provides), the api leaf template and its checks, under the role names every build realm shares.
 - Holds no graph in v0. A run takes its graph from the graph pack it names (Voluspa's `software`
   for the client gallery); a backend-only product would get its own graph in Voluspa, not here.
 - Its templates are copied into products, so they are MIT-licensed (`templates/`).
 
 ## What is here
 
-- `pack.yaml`: the recipe (template, implementer prompt, the check ladder by name), the services
-  (Postgres and SeaweedFS, by digest) and the sandbox: a stack built from `devcontainer/`, and the hosts
+- `pack.yaml`: the recipe (template, implementer prompt, the check ladder by name), the needs
+  (`postgres` and `s3`, named and not run here) and the sandbox: a stack built from `devcontainer/`, and
+  the hosts
   the checks reach (the Go proxy and checksum database, the vulnerability databases).
-- `devcontainer/Containerfile`: the stack layer: Go 1.26.9, `golangci-lint`, `sqlc`, `oasdiff`, `vacuum`,
+- `devcontainer/Containerfile`: the stack layer: Go 1.26.10, `golangci-lint`, `sqlc`, `oasdiff`, `vacuum`,
   `osv-scanner` and `govulncheck`, every download checked against a recorded SHA-256, and the ladder's
   scripts in `/opt/ygg/checks`, read-only for the agent. `ygg sandbox build --realm helheim-go` builds it.
+  Go 1.26.10 fixes GO-2026-6809 (`crypto/x509`), which the API template reaches through `ListenAndServe`:
+  on 1.26.9 govulncheck exits 3. The founder approved the image, pushed 2026-10-21, on 2026-10-23 as a security
+  exception to RR-13's rule that images are at least two weeks old. Every golang image in the repo carries the
+  same digest.
+- `templates/api/release.sh`: builds a static binary and `OUT/run.sh`, which starts it with no Go. It is used at
+  export.
 - `devcontainer/checks/protected-common`: the files that configure the checks of every product, one git
   pathspec a line: the CI and dev container, `.pre-commit-config.yaml`, the markdown, YAML, shell and
   secret-scan configs, and the licensing files. Rung 1 adds the Go lint configs (`.golangci.*`) and refuses
@@ -55,6 +62,10 @@ proposal `2026-10-17-realm-leaf-naming`).
   package fetching (`GOPROXY=off`, so the modules must be in the module cache), runs it in the foreground on
   `PORT`, and exits non-zero with a message when `PORT` is unset or the build fails. It is not a protected
   file: a task may change it, and `TestRunScriptStarts` guards it.
+- The template's server listens on `HOST:PORT` (all interfaces when `HOST` is unset). Its `AGENTS.md` and
+  `prompts/implementer.md` name the runtime of spec §9.4 (`PORT`, `HOST`, `DATABASE_URL`, `DATA_DIR`, the `S3_*`
+  names, the bucket `ygg-store`), the public address from `X-Forwarded-Host` and `X-Forwarded-Proto`, and the rule
+  that photo bytes and zips of photos never pass through the API; `TestPromptNamesTheRuntime` guards both.
 - `prompts/implementer.md`: what the implementer of a task in this leaf is told.
 
 ## Routing
@@ -69,7 +80,8 @@ gives it, all read from files, so every edge is `extracted`:
 - Go imports of another leaf's module.
 - Every file whose name ends in `openapi.yaml`: the leaf holds that contract. The template's contract is
   `openapi.yaml`. Name any other contract the same way, or routing does not see it.
-- The services this pack names (`postgres`, `seaweedfs`).
+- The services themselves: this pack declares the needs `postgres` and `s3`. Routing draws an edge to each of
+  `postgres` and `s3`, the runtime realm's providers of those needs, as odin's `services.For` names them.
 
 The `pointer-contract` gate judges a move that changes a contract by these edges or by `oasdiff`. `go-contract.sh`
 already runs `oasdiff breaking` in the leaf, and the image holds `oasdiff`. A contract change that only a guess
@@ -79,8 +91,10 @@ reaches goes to a person.
 
 `go test ./...` runs the scripts on small leaves made in a temp dir, with the real `go` and `git` and
 stand-ins for the image's tools; it builds and tests the template, which needs the Go module proxy the
-first time (set `YGG_REQUIRE_TEMPLATES` to fail instead of skipping when it cannot be reached). It also starts the
-template's `run.sh` from a copy with a free `PORT` and waits for the port (`TestRunScriptStarts`, RR-23). The
+first time (set `YGG_REQUIRE_TEMPLATES` to fail instead of skipping when it cannot be reached). It also
+starts the template's `run.sh` from a copy with a free `PORT` and waits for the port
+(`TestRunScriptStarts`, RR-23), and builds the template's `release.sh` and starts `OUT/run.sh` with no Go
+on the `PATH` (`TestReleaseScriptStarts`, gallery-runtime T15). The
 image itself and the tools in it are checked on a real engine (Phase 5b, v0-H14).
 
 ## CI
@@ -91,12 +105,13 @@ the devcontainer, without `go.work`, and runs `gofmt`, `go vet`, `go test -race`
 module proxy cannot be reached. The pr-bot cannot change the workflow; the founder pushes changes to it.
 
 The API template carries its own CI, `templates/api/.github/workflows/ci.yml`, so a product has a check from
-its first commit. It has one job, `test`, in the same Go image, with the pack's Postgres beside it. It runs
+its first commit. It has one job, `test`, in the same Go image, with Niflheim's Postgres 18 image beside it. It runs
 `gofmt`, `go vet`, `golangci-lint` v2.14.0 with the template's `.golangci.yml`, `go test -race`, the
 integration tests (`-tags integration`), and `govulncheck`. `TestTemplateCI` keeps it in step with the
-stack: the images, the golangci-lint release and its hash are read from `devcontainer/Containerfile` and
-`pack.yaml`. Rung 1 (`go-static.sh`) protects `.github/` as it does `.devcontainer/`, so only the product's
-people change the workflow, never an agent in a factory run. SeaweedFS is not started: today's template has
+stack: the Go image, the golangci-lint release and its hash are read from `devcontainer/Containerfile`, and
+the Postgres image must be a Postgres 18 one by digest (a later check compares it with Niflheim's). Rung 1 (`go-static.sh`) protects `.github/` as it
+does `.devcontainer/`, so only the product's
+people change the workflow, never an agent in a factory run. The store is not started: today's template has
 no S3 test.
 
 ## Depends on
