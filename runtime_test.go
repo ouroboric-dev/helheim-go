@@ -25,6 +25,20 @@ func TestPromptNamesTheRuntime(t *testing.T) {
 				t.Errorf("%s does not name %s", file, name)
 			}
 		}
+		// The presign client bullet says how a URL is signed for the public address.
+		if i := strings.Index(text, "presign client"); i < 0 {
+			t.Errorf("%s does not describe the presign client", file)
+		} else {
+			bullet := strings.Join(strings.Fields(text[i:min(i+900, len(text))]), " ")
+			for _, want := range []string{"S3_ENDPOINT", "path-style", "UsePathStyle", "S3_REGION", "virtual-host"} {
+				if !strings.Contains(bullet, want) {
+					t.Errorf("%s: the presign client bullet does not mention %s", file, want)
+				}
+			}
+		}
+		if !strings.Contains(text, "r.TLS") {
+			t.Errorf("%s does not say what to do when X-Forwarded-Host is absent (the request's Host, https only when r.TLS is set)", file)
+		}
 		flat := strings.Join(strings.Fields(strings.ToLower(text)), " ")
 		if !strings.Contains(flat, "photo bytes and zips of photos never pass through the api") {
 			t.Errorf("%s does not say that photo bytes and zips of photos never pass through the API", file)

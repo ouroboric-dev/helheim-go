@@ -22,6 +22,13 @@ This file only adds rules for this leaf. Read `docs/` for the design; this file 
   `X-Forwarded-Proto`. The API builds every public address (a presigned URL, a client link) from them,
   as `<X-Forwarded-Proto>://<X-Forwarded-Host>`, never from `S3_ENDPOINT`'s host. Storage URLs are
   path-style, `/<S3_BUCKET>/<key>`, signed for that address.
+- Use two S3 clients. The server-side client (CreateBucket, versioning, HeadObject, DeleteObject) uses
+  `S3_ENDPOINT`. The presign client is built per request with its endpoint set to
+  `<X-Forwarded-Proto>://<X-Forwarded-Host>`, never `S3_ENDPOINT`, with path-style on (AWS SDK v2
+  `UsePathStyle: true`; minio-go `BucketLookupPath`) and region `S3_REGION`, so the URL is
+  `<public base>/<S3_BUCKET>/<key>`. Presigning makes no network call. Never use virtual-host style.
+- When `X-Forwarded-Host` is absent (a direct call in the sandbox), build the address from the request's
+  `Host`, with `https` only when `r.TLS` is set.
 - **The bucket.** At start the API makes the bucket `S3_BUCKET` when it is missing, with versioning on
   when the store supports it.
 - **The photo rule.** Photo bytes and zips of photos never pass through the API: it hands the browser
