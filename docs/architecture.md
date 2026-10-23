@@ -87,8 +87,9 @@ reaches goes to a person.
 
 `go test ./...` runs the scripts on small leaves made in a temp dir, with the real `go` and `git` and
 stand-ins for the image's tools; it builds and tests the template, which needs the Go module proxy the
-first time (set `YGG_REQUIRE_TEMPLATES` to fail instead of skipping when it cannot be reached). It also starts the
-template's `run.sh` from a copy with a free `PORT` and waits for the port (`TestRunScriptStarts`, RR-23), and builds the template's `release.sh` and starts `OUT/run.sh` with no Go
+first time (set `YGG_REQUIRE_TEMPLATES` to fail instead of skipping when it cannot be reached). It also
+starts the template's `run.sh` from a copy with a free `PORT` and waits for the port
+(`TestRunScriptStarts`, RR-23), and builds the template's `release.sh` and starts `OUT/run.sh` with no Go
 on the `PATH` (`TestReleaseScriptStarts`, gallery-runtime T15). The
 image itself and the tools in it are checked on a real engine (Phase 5b, v0-H14).
 

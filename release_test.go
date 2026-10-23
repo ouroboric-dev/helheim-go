@@ -45,7 +45,7 @@ func TestReleaseScriptStarts(t *testing.T) {
 	rel.Dir = work
 	rel.Env = append(os.Environ(), "OUT=out", "GOWORK=off")
 	if b, err := rel.CombinedOutput(); err != nil {
-		if os.Getenv("YGG_REQUIRE_TEMPLATES") == "" && (strings.Contains(string(b), "dial tcp: lookup") || strings.Contains(string(b), "no such host")) {
+		if os.Getenv("YGG_REQUIRE_TEMPLATES") == "" && (strings.Contains(string(b), "dial tcp: lookup") || strings.Contains(string(b), "no such host") || strings.Contains(string(b), "connection refused") || strings.Contains(string(b), "i/o timeout")) {
 			t.Skipf("the modules can't be downloaded (set YGG_REQUIRE_TEMPLATES to fail instead): %s", b)
 		}
 		t.Fatalf("release.sh: %v\n%s", err, b)

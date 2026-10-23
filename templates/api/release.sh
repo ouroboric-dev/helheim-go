@@ -13,11 +13,10 @@ mkdir -p "$OUT"
 OUT=$(cd "$OUT" && pwd)
 
 cd "$(dirname "$0")"
-rm -f "$OUT/api"
+rm -rf "$OUT/api" "$OUT/run.sh"
 CGO_ENABLED=0 GOWORK=off GOFLAGS=-mod=readonly go build -trimpath -o "$OUT/api" ./cmd/api
 
-# Remove first: a link planted at OUT/run.sh must not be followed.
-rm -f "$OUT/run.sh"
+# OUT/run.sh was removed above: a link planted there must not be followed.
 cat >"$OUT/run.sh" <<'RUN'
 #!/bin/sh
 # Starts the released API in the foreground on PORT (and HOST).
