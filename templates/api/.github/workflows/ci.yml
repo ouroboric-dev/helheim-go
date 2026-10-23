@@ -1,5 +1,5 @@
 # CI of this product: the required check "test". It runs the stack's own commands on the stack's own
-# images (the Go image of the factory's dev container, Postgres as the integration tests expect it), so a
+# images (the Go image of the factory's dev container, Postgres 18 as the runtime realm runs it), so a
 # change that passes the factory's checks passes here. Only the product's people change this file, never an
 # agent in a factory run: rung 1 of the ladder refuses a change to .github/.
 name: ci
@@ -19,7 +19,7 @@ jobs:
     services:
       postgres:
         image: >-
-          docker.io/library/postgres:17.10-bookworm@sha256:9b18b78397054fce88a9552e9d5a3ad5bb7fd258c5b3cc1c5028e46373d6ea8f
+          docker.io/library/postgres:18.4-bookworm@sha256:882236b897e39051d2368c5ccc6cda944904723506b2dfc97f2a8f5bc9afa382
         env:
           POSTGRES_DB: app
           POSTGRES_HOST_AUTH_METHOD: trust

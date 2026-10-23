@@ -1,6 +1,6 @@
 # helheim-go
 
-The Helheim realm's Go flavor: prompts, devcontainer stack layer and services, templates and checks for backends.
+The Helheim realm's Go flavor: prompts, devcontainer stack layer, templates and checks for backends, and the needs of their APIs.
 
 Part of [Yggdrasil](https://github.com/ouroboric-dev/yggdrasil), the agentic factory by
 [Ouroboric](https://github.com/ouroboric-dev/ouroboric). Work on it from the Yggdrasil umbrella,
@@ -18,7 +18,8 @@ The required check `test` runs `gofmt`, `go vet`, `go test -race` as a non-root 
 ## What it holds
 
 The recipe of a Go API leaf for the factory: a template, a stack image with the check ladder's tools, the
-ladder's scripts, an implementer prompt and the services an API needs. A run loads it by name from the realm
+ladder's scripts, an implementer prompt and the needs of an API (a database and a store, which the runtime realm
+provides). A run loads it by name from the realm
 store and builds its leaves in it. See [the architecture](docs/architecture.md).
 
 ## Docs

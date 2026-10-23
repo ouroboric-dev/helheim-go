@@ -8,7 +8,7 @@ style: reference
 
 # helheim-go architecture
 
-The Helheim realm's Go flavor: prompts, devcontainer stack layer and services, templates and checks
+The Helheim realm's Go flavor: prompts, devcontainer stack layer, templates and checks
 for backends.
 
 Helheim is the realm of backends, and this is its Go flavor (realm leaf naming, Yggdrasil change
@@ -17,7 +17,8 @@ proposal `2026-10-17-realm-leaf-naming`).
 ## Responsibilities
 
 - Holds the recipe of a Go backend leaf (spec §9, as changed by realm leaf naming): the `implementer`
-  prompt, the Go devcontainer stack layer with the services an API needs (Postgres, SeaweedFS), the
+  prompt, the Go devcontainer stack layer with the needs of an API (a Postgres database and an S3 store,
+  which the runtime realm provides), the
   api leaf template and its checks, under the role names every build realm shares.
 - Holds no graph in v0. A run takes its graph from the graph pack it names (Voluspa's `software`
   for the client gallery); a backend-only product would get its own graph in Voluspa, not here.
@@ -25,8 +26,9 @@ proposal `2026-10-17-realm-leaf-naming`).
 
 ## What is here
 
-- `pack.yaml`: the recipe (template, implementer prompt, the check ladder by name), the services
-  (Postgres and SeaweedFS, by digest) and the sandbox: a stack built from `devcontainer/`, and the hosts
+- `pack.yaml`: the recipe (template, implementer prompt, the check ladder by name), the needs
+  (`postgres` and `s3`, named and not run here) and the sandbox: a stack built from `devcontainer/`, and
+  the hosts
   the checks reach (the Go proxy and checksum database, the vulnerability databases).
 - `devcontainer/Containerfile`: the stack layer: Go 1.26.10, `golangci-lint`, `sqlc`, `oasdiff`, `vacuum`,
   `osv-scanner` and `govulncheck`, every download checked against a recorded SHA-256, and the ladder's
@@ -77,7 +79,8 @@ gives it, all read from files, so every edge is `extracted`:
 - Go imports of another leaf's module.
 - Every file whose name ends in `openapi.yaml`: the leaf holds that contract. The template's contract is
   `openapi.yaml`. Name any other contract the same way, or routing does not see it.
-- The services this pack names (`postgres`, `seaweedfs`).
+- The services themselves: this pack declares the needs `postgres` and `s3`, and the runtime realm
+  names and runs them.
 
 The `pointer-contract` gate judges a move that changes a contract by these edges or by `oasdiff`. `go-contract.sh`
 already runs `oasdiff breaking` in the leaf, and the image holds `oasdiff`. A contract change that only a guess
@@ -101,12 +104,13 @@ the devcontainer, without `go.work`, and runs `gofmt`, `go vet`, `go test -race`
 module proxy cannot be reached. The pr-bot cannot change the workflow; the founder pushes changes to it.
 
 The API template carries its own CI, `templates/api/.github/workflows/ci.yml`, so a product has a check from
-its first commit. It has one job, `test`, in the same Go image, with the pack's Postgres beside it. It runs
+its first commit. It has one job, `test`, in the same Go image, with Niflheim's Postgres 18 image beside it. It runs
 `gofmt`, `go vet`, `golangci-lint` v2.14.0 with the template's `.golangci.yml`, `go test -race`, the
 integration tests (`-tags integration`), and `govulncheck`. `TestTemplateCI` keeps it in step with the
-stack: the images, the golangci-lint release and its hash are read from `devcontainer/Containerfile` and
-`pack.yaml`. Rung 1 (`go-static.sh`) protects `.github/` as it does `.devcontainer/`, so only the product's
-people change the workflow, never an agent in a factory run. SeaweedFS is not started: today's template has
+stack: the Go image, the golangci-lint release and its hash are read from `devcontainer/Containerfile`, and
+the Postgres image must be a Postgres 18 one by digest (a later check compares it with Niflheim's). Rung 1 (`go-static.sh`) protects `.github/` as it
+does `.devcontainer/`, so only the product's
+people change the workflow, never an agent in a factory run. The store is not started: today's template has
 no S3 test.
 
 ## Depends on

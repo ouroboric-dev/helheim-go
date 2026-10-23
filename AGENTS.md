@@ -1,6 +1,6 @@
 # AGENTS.md: helheim-go
 
-The Helheim realm's Go flavor: prompts, devcontainer stack layer and services, templates and checks for backends.
+The Helheim realm's Go flavor: prompts, devcontainer stack layer, templates and checks for backends, and the needs of their APIs.
 
 Follow the Yggdrasil invariants:
 <https://github.com/ouroboric-dev/yggdrasil/blob/main/AGENTS.md#invariants>

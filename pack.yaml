@@ -1,5 +1,6 @@
-# The Go flavor of the Helheim realm (change realm-leaf-naming): the recipe of a Go API leaf and the
-# services an API needs. It has no graph: a run takes its graph from the graph pack it names (Voluspa's
+# The Go flavor of the Helheim realm (change realm-leaf-naming): the recipe of a Go API leaf and
+# the services it needs, by name: `needs` asks for a database and a store, and the runtime realm
+# (Niflheim) provides them. It has no graph: a run takes its graph from the graph pack it names (Voluspa's
 # software for the client gallery). The check ladder is rungs 1 to 5 of spec §9.5, with the dependency policy
 # (deps) and the two-tenant authorisation harness (authz) beside the security rung; the
 # reviewers (rung 6) are the graph's, and rung 7 is the grader's.
@@ -20,18 +21,7 @@ leaf:
   first_commit: [LICENSE]
   implementer: prompts/implementer.md
   checks: [static, unit, tdd, contract, deps, security, authz, integration]
-services:
-  postgres:
-    image: >-
-      docker.io/library/postgres:17.10-bookworm@sha256:9b18b78397054fce88a9552e9d5a3ad5bb7fd258c5b3cc1c5028e46373d6ea8f
-    env:
-      POSTGRES_DB: app
-      POSTGRES_HOST_AUTH_METHOD: trust
-    ports: [5432]
-  seaweedfs:
-    image: docker.io/chrislusf/seaweedfs:4.45@sha256:fc9f76fa993ad69966ffeb2f65d0318fcae39c6f8e20cf68ef7b3a5cb97769e5
-    command: [server, -s3, -dir=/data]
-    ports: [8333]
+needs: [postgres, s3]
 sandbox:
   build: devcontainer
   egress: [proxy.golang.org, sum.golang.org, vuln.go.dev, api.osv.dev]

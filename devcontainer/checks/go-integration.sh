@@ -21,5 +21,5 @@ for ((i = 0; i < wait_s; i++)); do
 done
 [ "$up" -eq 1 ] || { echo "integration: Postgres at $host:$port did not answer in ${wait_s}s"; exit 1; }
 export YGG_DATABASE_URL="postgres://postgres@$host:$port/app?sslmode=disable"
-export YGG_S3_ENDPOINT="${YGG_S3_ENDPOINT:-http://seaweedfs:8333}"
+export YGG_S3_ENDPOINT="${YGG_S3_ENDPOINT:-http://s3:8333}"
 go test -race -count=1 -tags integration ./...
