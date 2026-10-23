@@ -28,9 +28,13 @@ proposal `2026-10-17-realm-leaf-naming`).
 - `pack.yaml`: the recipe (template, implementer prompt, the check ladder by name), the services
   (Postgres and SeaweedFS, by digest) and the sandbox: a stack built from `devcontainer/`, and the hosts
   the checks reach (the Go proxy and checksum database, the vulnerability databases).
-- `devcontainer/Containerfile`: the stack layer: Go 1.26.9, `golangci-lint`, `sqlc`, `oasdiff`, `vacuum`,
+- `devcontainer/Containerfile`: the stack layer: Go 1.26.10, `golangci-lint`, `sqlc`, `oasdiff`, `vacuum`,
   `osv-scanner` and `govulncheck`, every download checked against a recorded SHA-256, and the ladder's
   scripts in `/opt/ygg/checks`, read-only for the agent. `ygg sandbox build --realm helheim-go` builds it.
+  Go 1.26.10 fixes GO-2026-6809 (`crypto/x509`), which the API template reaches through `ListenAndServe`:
+  on 1.26.9 govulncheck exits 3. The founder approved the image, pushed 2026-10-21, on 2026-10-23 as a security
+  exception to RR-13's rule that images are at least two weeks old. Every golang image in the repo carries the
+  same digest.
 - `devcontainer/checks/protected-common`: the files that configure the checks of every product, one git
   pathspec a line: the CI and dev container, `.pre-commit-config.yaml`, the markdown, YAML, shell and
   secret-scan configs, and the licensing files. Rung 1 adds the Go lint configs (`.golangci.*`) and refuses

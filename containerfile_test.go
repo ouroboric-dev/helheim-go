@@ -123,3 +123,33 @@ func TestTheLintConfigIsBakedWithTheScripts(t *testing.T) {
 		t.Error("go-static.sh does not read the config from beside itself")
 	}
 }
+
+// GO-2026-6809 (crypto/x509) is reached from the API template's ListenAndServe path and is fixed in Go
+// 1.26.10; on 1.26.9 govulncheck exits 3 and every API task gives up. One golang image, everywhere.
+const goImage = "docker.io/library/golang:1.26.10-bookworm@sha256:632dff7351799a5a9954a48dc06670ade72ee44e8c351cdc0e5a57af2fea21af"
+
+func TestEveryGolangImageIsTheOnePinnedFixedRelease(t *testing.T) {
+	ref := regexp.MustCompile(`docker\.io/library/golang:[^\s",]+`)
+	files := []string{
+		filepath.Join("devcontainer", "Containerfile"),
+		filepath.Join(".github", "workflows", "ci.yml"),
+		filepath.Join(".devcontainer", "devcontainer.json"),
+		filepath.Join("templates", "api", ".devcontainer", "devcontainer.json"),
+		filepath.Join("templates", "api", ".github", "workflows", "ci.yml"),
+	}
+	for _, f := range files {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := ref.FindAllString(string(raw), -1)
+		if len(found) == 0 {
+			t.Errorf("%s names no golang image", f)
+		}
+		for _, got := range found {
+			if got != goImage {
+				t.Errorf("%s pins %s; want %s", f, got, goImage)
+			}
+		}
+	}
+}
