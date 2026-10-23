@@ -61,6 +61,12 @@ The product runs from `/app/start.sh`, which is the factory's: do not change it 
 and runs it. It fetches nothing. If a task changes how the program starts or what it builds from, keep
 `run.sh` working; the factory starts it in a test.
 
+## Keep `release.sh` working
+
+`release.sh` at the root of the leaf builds a static binary and an `OUT/run.sh` that starts it with no Go on the
+`PATH`; the factory runs it when it exports the product. Keep `release.sh` working, and change it only when the
+leaf's build changes (a new package to build, a build flag). The factory starts the release in a test.
+
 ## Check your work before you stop
 
 Run these in the repository and fix what they say:

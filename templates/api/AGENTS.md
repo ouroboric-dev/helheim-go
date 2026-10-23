@@ -71,3 +71,5 @@ This file only adds rules for this leaf. Read `docs/` for the design; this file 
 - `openapi.yaml`: the contract.
 - `run.sh`: starts the leaf on `PORT` (and `HOST`): builds `cmd/api` into a temporary folder and runs it. It fetches no
   packages. Keep it working: a test starts it.
+- `release.sh`: builds a static binary and an `OUT/run.sh` that starts it with no Go. Keep `release.sh` working; change it
+  only when the leaf's build changes. A test starts the release.

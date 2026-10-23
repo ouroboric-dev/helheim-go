@@ -45,3 +45,24 @@ func TestPromptNamesTheRuntime(t *testing.T) {
 		}
 	}
 }
+
+// TestPromptNamesTheRelease: the implementer prompt and the template's AGENTS.md name release.sh and say to
+// keep it working.
+func TestPromptNamesTheRelease(t *testing.T) {
+	for _, file := range []string{"prompts/implementer.md", "templates/api/AGENTS.md"} {
+		raw, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		flat := strings.Join(strings.Fields(string(raw)), " ")
+		if !strings.Contains(flat, "release.sh") {
+			t.Errorf("%s does not name release.sh", file)
+		}
+		if !strings.Contains(flat, "Keep `release.sh` working") && !strings.Contains(flat, "keep `release.sh` working") {
+			t.Errorf("%s does not say to keep release.sh working", file)
+		}
+		if !strings.Contains(flat, "only when the leaf's build changes") {
+			t.Errorf("%s does not say to change release.sh only when the leaf's build changes", file)
+		}
+	}
+}
