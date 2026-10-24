@@ -39,8 +39,9 @@ if git cat-file -e "$base:sqlc.yaml" 2>/dev/null; then
   if ! (cd "$scratch" && sqlc diff -f sqlc.yaml) >"$YGG_TMP/sqlc.out" 2>"$YGG_TMP/sqlc.err"; then
     cat "$YGG_TMP/sqlc.out"
     cat "$YGG_TMP/sqlc.err" >&2
-    # sqlc names the file, line and column of an error in the SQL; a diff of generated code names none.
-    if grep -Eq '^[^[:space:]:][^:]*:[0-9]+:([0-9]+:)? ' "$YGG_TMP/sqlc.out" "$YGG_TMP/sqlc.err"; then
+    # sqlc names the file, line and column of an error in the SQL; a diff of generated code names none (its
+    # +, - and @ lines are not error lines).
+    if grep -Eq '^[^[:space:]:+@-][^:]*:[0-9]+:([0-9]+:)? ' "$YGG_TMP/sqlc.out" "$YGG_TMP/sqlc.err"; then
       ygg_stage sqlc-text "$YGG_TMP/sqlc.out" "$YGG_TMP/sqlc.err"
     else
       ygg_stage none build "contract: the code in internal/store is not what the SQL says; run sqlc generate"

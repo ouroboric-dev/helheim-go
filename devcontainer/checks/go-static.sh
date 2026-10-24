@@ -99,6 +99,7 @@ echo "== go vet"
 # The machine mode of go vet exits 0 with findings and writes them to stdout; the text mode keeps the exit code and the
 # log. A package that does not type-check has no finding in the JSON, only the message on stderr: then the message is
 # the finding. Each run is converted on its own, as the first one that fails ends the rung.
+# The fallback for a type error read from stderr can go when the pin moves to a gleipnir whose go-vet-json reads it (4d4fdb8).
 vet_stage() {
   if [ -s "$2" ] && ! grep -q '"message"' "$1"; then
     ygg_stage none build "$(head -c 3500 "$2")"

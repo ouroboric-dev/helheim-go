@@ -60,6 +60,12 @@ ygg_result() {
   # The script's own timeout ends a command with 124.
   [ "$code" -ne 124 ] || args+=(--timed-out)
   if [ "$format" = none ]; then
+    # A script that exits 0 passed: a failure staged for a step whose text run then passed is not a finding.
+    [ "$code" -ne 0 ] || set --
+    # A script that died before it reached a tool has nothing staged; the result still says so.
+    if [ "$#" -eq 0 ] && [ "$code" -ne 0 ]; then
+      set -- other "the script exited $code before it reached a tool"
+    fi
     while [ "$#" -ge 2 ]; do
       args+=(--kind "$1" --message "$2")
       shift 2

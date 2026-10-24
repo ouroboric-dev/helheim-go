@@ -368,3 +368,40 @@ func TestTheResultLibraryKeepsTheExitCodeAndSaysATimeout(t *testing.T) {
 		t.Errorf("a converter that fails changed the code of a failing script: %d", code)
 	}
 }
+
+// A script that exits 0 writes a passing result, whatever its machine runs said: a tool whose machine mode printed
+// nothing, or noise on stderr, while its text mode passed, must not leave a staged failure behind.
+func TestAPassingScriptWritesAPassingResultWhateverTheMachineModeSaid(t *testing.T) {
+	cases := []struct{ check, leaf string }{{"security", "nojson"}, {"deps", "nojson"}, {"static", "vetnoise"}}
+	realGo, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cases {
+		t.Run(c.check+"/"+c.leaf, func(t *testing.T) {
+			rc := caseOf(t, c.check)
+			dir, bin, env := prepare(t, rc, c.leaf)
+			if c.check == "static" {
+				// go vet -json prints noise on stderr and nothing on stdout; every other call is the real go.
+				writeExe(t, filepath.Join(bin, "go"), "#!/bin/sh\nif [ \"$1 $2\" = 'vet -json' ]; then echo 'vet: noise' >&2; exit 0; fi\nexec '"+realGo+"' \"$@\"\n")
+			}
+			code, out, r := typed(t, dir, bin, rc.script, env...)
+			if code != 0 || r == nil || !r.Passed || r.ExitCode != 0 || len(r.Failures) != 0 {
+				t.Fatalf("exit %d, result %+v\n%s", code, r, out)
+			}
+		})
+	}
+}
+
+// A script that dies before it reaches a tool still says so.
+func TestAScriptThatDiesBeforeATool(t *testing.T) {
+	lib, _ := filepath.Abs(filepath.Join("devcontainer", "checks", "lib", "result.sh"))
+	bin := t.TempDir()
+	writeExe(t, filepath.Join(bin, "ygg-check-result"), "#!/bin/sh\necho \"$*\" >> \"$(dirname \"$0\")/calls.log\"\n")
+	cmd := exec.Command("bash", "-c", "set -euo pipefail\n. '"+lib+"'\nygg_start unit\nfalse\n")
+	cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "YGG_CHECK_RESULT=/x")
+	_ = cmd.Run()
+	if !strings.Contains(calls(bin), "--kind other --message the script exited 1 before it reached a tool") {
+		t.Errorf("converter called %q", calls(bin))
+	}
+}
