@@ -1,0 +1,6 @@
+--- a/x.sql
++++ b/x.sql
+@@ -1,2 +1,2 @@
++x.sql:12: select 1
+-y.sql:3:4: select 2
+@a.sql:5: z

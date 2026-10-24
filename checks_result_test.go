@@ -66,7 +66,7 @@ func writeExe(t *testing.T, path, body string) {
 }
 
 // fakeTools makes a stand-in for each tool that has files in dir: <tool>.json is what it prints in its machine mode
-// (an argument -json or json), <tool>.out and <tool>.err what it prints on stdout and stderr otherwise, <tool>.exit
+// (an argument -json or json), <tool>.txt and <tool>.err what it prints on stdout and stderr otherwise, <tool>.exit
 // the code of that run, <tool>.jsonexit the code of the machine run (0 when absent: govulncheck and go vet exit 0 with
 // findings). A tool called with --output.json.path FILE writes <tool>.json to FILE, as golangci-lint does, and
 // prints its text. Every call is logged to calls.log in bin.
@@ -95,7 +95,7 @@ if [ "$mode" = json ]; then
   [ ! -f "$f.json" ] || cat "$f.json"
   exit "$(code jsonexit)"
 fi
-[ ! -f "$f.out" ] || cat "$f.out"
+[ ! -f "$f.txt" ] || cat "$f.txt"
 [ ! -f "$f.err" ] || cat "$f.err" >&2
 exit "$(code exit)"
 `
@@ -403,5 +403,15 @@ func TestAScriptThatDiesBeforeATool(t *testing.T) {
 	_ = cmd.Run()
 	if !strings.Contains(calls(bin), "--kind other --message the script exited 1 before it reached a tool") {
 		t.Errorf("converter called %q", calls(bin))
+	}
+}
+
+// A line of a diff that looks like file:line: is no location of an error in the SQL.
+func TestADiffLineIsNoSqlcLocation(t *testing.T) {
+	rc := caseOf(t, "contract")
+	dir, bin, env := prepare(t, rc, "diffline")
+	code, out, r := typed(t, dir, bin, rc.script, env...)
+	if code == 0 || r == nil || len(r.Failures) != 1 || r.Failures[0].Location != "" || !strings.Contains(r.Failures[0].Message, "not what the SQL says") {
+		t.Errorf("exit %d, result %+v\n%s", code, r, out)
 	}
 }

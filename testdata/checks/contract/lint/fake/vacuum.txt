@@ -1,0 +1,1 @@
+  ✗ error  openapi.yaml:1:1  the document has no info object  [oas3-schema]
