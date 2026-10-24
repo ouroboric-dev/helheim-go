@@ -37,7 +37,9 @@ func converterWrapper(t *testing.T, bin string) {
 	converterOnce.Do(func() {
 		cmd := exec.Command("go", "mod", "download", "-json", gleipnirPin)
 		cmd.Dir = t.TempDir()
-		cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
+		// A GOPATH of its own: CI runs the tests as a user who cannot write the image's GOPATH, where the go
+		// command keeps its checksum-database cache; the download is still verified against sum.golang.org.
+		cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=", "GOPATH="+filepath.Join(os.TempDir(), "ygg-converter-gopath"))
 		out, err := cmd.Output()
 		if err != nil {
 			converterErr = &buildError{err, string(out)}

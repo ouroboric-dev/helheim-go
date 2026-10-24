@@ -4,7 +4,7 @@
 set -euo pipefail
 # The tools are found in the image's root-owned folders only, never in one the agent can write (/go/bin).
 export PATH="${YGG_CHECKS_PATH:-/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin}"
-# shellcheck source=lib/result.sh
+# shellcheck source-path=SCRIPTDIR source=lib/result.sh
 . "$(dirname "$0")/lib/result.sh"
 ygg_start static
 # The module cache is kept between runs and the agent can write it. A dependency edited there (an init that
