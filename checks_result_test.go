@@ -23,7 +23,7 @@ import (
 // The tools that only the image has (golangci-lint, sqlc, vacuum, oasdiff, govulncheck, osv-scanner) are
 // recorded stand-ins, made from the files beside each leaf under fake/ (see fakeTools).
 
-const gleipnirPin = "github.com/ouroboric-dev/gleipnir@v0.0.0-20261024192006-9da064f0b1ee"
+const gleipnirPin = "github.com/ouroboric-dev/gleipnir@v0.0.0-20261024195951-fdb5c70ce2de"
 
 var (
 	converterOnce sync.Once
