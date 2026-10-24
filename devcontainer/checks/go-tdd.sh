@@ -12,14 +12,22 @@
 set -euo pipefail
 # The tools are found in the image's root-owned folders only, never in one the agent can write (/go/bin).
 export PATH="${YGG_CHECKS_PATH:-/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin}"
+# shellcheck source=lib/result.sh
+. "$(dirname "$0")/lib/result.sh"
+ygg_start tdd
 # The module cache is kept between runs and the agent can write it. A dependency edited there (an init that
 # exits 0 makes a failing test report ok) is caught: the cache must match go.sum, which the diff shows.
 { go mod download && go mod verify; } >/dev/null 2>&1 || {
+  ygg_stage none policy "the module cache does not match go.sum, a dependency in it was changed"
   echo "the module cache does not match go.sum, a dependency in it was changed:"
   go mod verify 2>&1 || go mod download 2>&1 || true
   exit 1
 }
-base="$(git merge-base HEAD refs/heads/main)" || { echo "tdd: this leaf has no main to compare with"; exit 1; }
+base="$(git merge-base HEAD refs/heads/main)" || {
+  ygg_stage none policy "tdd: this leaf has no main to compare with"
+  echo "tdd: this leaf has no main to compare with"
+  exit 1
+}
 # sqlc.yaml is read as it was at the base: the agent must not widen the exemption by editing it.
 sqlc_value() { { git show "$base:sqlc.yaml" 2>/dev/null || true; } | sed -n "s/^ *$1: *[\"']\{0,1\}\([^\"' #]*\).*/\1/p" | sed 's|/*$||'; }
 queries_dir="$(sqlc_value queries | head -n 1)" schema_dir="$(sqlc_value schema | head -n 1)"
@@ -47,6 +55,9 @@ done
 
 if [ ${#tests[@]} -eq 0 ]; then
   if [ ${#code[@]} -gt 0 ] && [ ${#skipped[@]} -eq 0 ]; then
+    pairs=()
+    for f in "${code[@]}"; do pairs+=(policy "$f changed without a new or changed test: write the test first, see it fail, then write the code"); done
+    ygg_stage none "${pairs[@]}"
     echo "tdd: Go code changed without a new or changed test:"
     printf '  %s\n' "${code[@]}"
     echo "Write the test first, see it fail, then write the code."
@@ -61,8 +72,7 @@ if [ ${#tests[@]} -eq 0 ]; then
   exit 0
 fi
 
-parent="$(mktemp -d)"
-trap 'rm -rf -- "$parent"' EXIT
+parent="$(mktemp -d "$YGG_TMP/parent.XXXXXX")"
 git archive "$base" | tar -x -C "$parent"
 for f in "${tests[@]}"; do
   mkdir -p "$parent/$(dirname "$f")"
@@ -72,6 +82,9 @@ pkgs="$(printf '%s\n' "${tests[@]}" | xargs -n1 dirname | sort -u | sed 's|^\([^
 log="$parent/.tdd.log"
 # shellcheck disable=SC2086 # the packages are words
 if (cd "$parent" && go test -count=1 $pkgs) >"$log" 2>&1; then
+  pairs=()
+  for f in "${tests[@]}"; do pairs+=(policy "$f passes on the commit the task started from, so it tests nothing new: a test of new behaviour fails before the code for it exists"); done
+  ygg_stage none "${pairs[@]}"
   echo "tdd: the new tests pass on the commit the task started from, so they test nothing new:"
   printf '  %s\n' "${tests[@]}"
   echo "A test of new behaviour fails before the code for it exists. Change the tests so they do."

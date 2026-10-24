@@ -1103,7 +1103,7 @@ func TestStaticFailsClosedWithoutMainOrList(t *testing.T) {
 	for name, list := range map[string]*string{"a missing list": nil, "an empty list": new(string), "a list of comments": ptr("# only a comment\n\n  \n")} {
 		t.Run(name, func(t *testing.T) {
 			checks := t.TempDir()
-			put(t, checks, map[string]string{"go-static.sh": string(src)})
+			put(t, checks, map[string]string{"go-static.sh": string(src), "lib/result.sh": mustRead(t, filepath.Join("devcontainer", "checks", "lib", "result.sh"))})
 			if list != nil {
 				put(t, checks, map[string]string{"protected-common": *list})
 			}

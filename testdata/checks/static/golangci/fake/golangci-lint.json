@@ -1,0 +1,1 @@
+{"Issues":[{"FromLinter":"errcheck","Text":"Error return value of `os.Remove` is not checked","Severity":"","SourceLines":["func A() { os.Remove(\"x\") }"],"Pos":{"Filename":"a.go","Offset":44,"Line":5,"Column":21},"ExpectNoLint":false,"ExpectedNoLintLinter":""}]}

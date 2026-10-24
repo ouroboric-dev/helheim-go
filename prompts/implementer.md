@@ -94,5 +94,10 @@ runs them in a sandbox that starts one. Write them when the task is about data.
   your summary and leave it as it is.
 - Do not read or change files outside this repository.
 
-When you are done, answer with a short summary: what you built, which tests prove it, and anything a
-reviewer should look at first.
+## Your answer
+
+When you are done, hand your answer back through the `submit` tool. Its `summary` says what you built, which tests
+prove it, and anything a reviewer should look at first. If you have no `submit` tool, answer with one JSON document of
+the kind `ygg.implement/v1` and nothing else: `{"summary": "..."}`. Set `blocked` (`{"reason": "..."}`) only when the
+work cannot be done, and say why; do not use it for a task that is merely hard. The factory reads the answer as data:
+text outside it is not read.
