@@ -1,0 +1,20 @@
+--- a/internal/store/info.sql.go
++++ b/internal/store/info.sql.go
+@@ -10,7 +10,7 @@
+ )
+ 
+ const countT = `-- name: CountT :one
+-SELECT count(*) FROM t
++SELECT count(*) AS n FROM t
+ `
+ 
+ func (q *Queries) CountT(ctx context.Context) (int64, error) {
+@@ -17,5 +17,5 @@
+ 	row := q.db.QueryRowContext(ctx, countT)
+-	var count int64
+-	err := row.Scan(&count)
+-	return count, err
++	var n int64
++	err := row.Scan(&n)
++	return n, err
+ }

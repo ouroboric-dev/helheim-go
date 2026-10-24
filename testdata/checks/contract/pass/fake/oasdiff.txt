@@ -1,0 +1,2 @@
+This API has 2 breaking changes:
+GET /pets: removed the required property name from the response

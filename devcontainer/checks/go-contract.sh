@@ -6,25 +6,56 @@
 set -euo pipefail
 # The tools are found in the image's root-owned folders only, never in one the agent can write (/go/bin).
 export PATH="${YGG_CHECKS_PATH:-/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin}"
-[ -f openapi.yaml ] || { echo "contract: this leaf has no openapi.yaml, and it owns the contract of its API"; exit 1; }
+# shellcheck source-path=SCRIPTDIR source=lib/result.sh
+. "$(dirname "$0")/lib/result.sh"
+ygg_start contract
+if [ ! -f openapi.yaml ]; then
+  ygg_stage none policy "contract: this leaf has no openapi.yaml, and it owns the contract of its API"
+  echo "contract: this leaf has no openapi.yaml, and it owns the contract of its API"
+  exit 1
+fi
 echo "== openapi lint"
-vacuum lint --no-style --details --fail-severity error openapi.yaml
-base="$(git merge-base HEAD refs/heads/main)" || { echo "contract: this leaf has no main to compare with"; exit 1; }
+rc=0
+vacuum lint --no-style --details --fail-severity error openapi.yaml >"$YGG_TMP/vacuum.txt" 2>&1 || rc=$?
+cat "$YGG_TMP/vacuum.txt"
+if [ "$rc" -ne 0 ]; then
+  ygg_stage none lint "$(head -c 3500 "$YGG_TMP/vacuum.txt")"
+  exit "$rc"
+fi
+base="$(git merge-base HEAD refs/heads/main)" || {
+  ygg_stage none policy "contract: this leaf has no main to compare with"
+  echo "contract: this leaf has no main to compare with"
+  exit 1
+}
 # sqlc diff reads the sqlc.yaml of the commit the task started from, in a copy of the working tree: a
 # sqlc.yaml the agent changed, linked or hid cannot matter.
 if git cat-file -e "$base:sqlc.yaml" 2>/dev/null; then
   echo "== generated code"
-  scratch="$(mktemp -d)"
-  trap 'rm -rf -- "$scratch"' EXIT
+  scratch="$YGG_TMP/tree"
+  mkdir "$scratch"
   tar --exclude=./.git -cf - . | tar -x -C "$scratch"
   rm -f -- "$scratch/sqlc.yaml" "$scratch/sqlc.yml" "$scratch/sqlc.json"
   git show "$base:sqlc.yaml" >"$scratch/sqlc.yaml"
-  (cd "$scratch" && sqlc diff -f sqlc.yaml) || { echo "contract: the code in internal/store is not what the SQL says; run sqlc generate"; exit 1; }
+  if ! (cd "$scratch" && sqlc diff -f sqlc.yaml) >"$YGG_TMP/sqlc.out" 2>"$YGG_TMP/sqlc.err"; then
+    cat "$YGG_TMP/sqlc.out"
+    cat "$YGG_TMP/sqlc.err" >&2
+    # sqlc names the file, line and column of an error in the SQL; a diff of generated code names none (its
+    # +, - and @ lines are not error lines).
+    if grep -Eq '^[^[:space:]:+@-][^:]*:[0-9]+:([0-9]+:)? ' "$YGG_TMP/sqlc.out" "$YGG_TMP/sqlc.err"; then
+      ygg_stage sqlc-text "$YGG_TMP/sqlc.out" "$YGG_TMP/sqlc.err"
+    else
+      ygg_stage none build "contract: the code in internal/store is not what the SQL says; run sqlc generate"
+    fi
+    echo "contract: the code in internal/store is not what the SQL says; run sqlc generate"
+    exit 1
+  fi
+  cat "$YGG_TMP/sqlc.out"
+  cat "$YGG_TMP/sqlc.err" >&2
 fi
+# A breaking change is listed, not refused (the header above says why), so it is no failure of the typed result either.
 echo "== breaking changes since the task started"
 if git cat-file -e "$base:openapi.yaml" 2>/dev/null; then
-  old="$(mktemp)"
-  trap 'rm -rf -- "${scratch:-}" "$old"' EXIT
+  old="$YGG_TMP/openapi.base.yaml"
   git show "$base:openapi.yaml" > "$old"
   if [ "$(oasdiff breaking "$old" openapi.yaml --format json)" = "[]" ]; then
     echo "none"
